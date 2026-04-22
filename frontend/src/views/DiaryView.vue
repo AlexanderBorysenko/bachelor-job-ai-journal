@@ -169,26 +169,33 @@ watch(() => route.params.date, (newDate) => {
     <!-- Entry -->
     <div v-else-if="entry">
       <!-- Navigation -->
-      <div class="flex items-center justify-between mb-6">
-        <button
-          @click="goTo(prevDate)"
-          :disabled="!prevDate"
-          class="px-3 py-1.5 rounded-md text-sm border border-sand-200 disabled:opacity-30"
-          :class="prevDate ? 'text-sand-700 hover:bg-sand-100 cursor-pointer' : 'text-sand-400'"
-        >
-          ← Попередній
-        </button>
-        <h1 class="text-xl font-medium text-sand-800">
+      <div class="mb-4 sm:mb-6">
+        <h1 class="text-base sm:text-xl font-medium text-sand-800 text-center mb-2 sm:mb-0 sm:hidden">
           {{ formatDate(entry.date) }}
         </h1>
-        <button
-          @click="goTo(nextDate)"
-          :disabled="!nextDate"
-          class="px-3 py-1.5 rounded-md text-sm border border-sand-200 disabled:opacity-30"
-          :class="nextDate ? 'text-sand-700 hover:bg-sand-100 cursor-pointer' : 'text-sand-400'"
-        >
-          Наступний →
-        </button>
+        <div class="flex items-center justify-between">
+          <button
+            @click="goTo(prevDate)"
+            :disabled="!prevDate"
+            class="px-2 sm:px-3 py-1.5 rounded-md text-sm border border-sand-200 disabled:opacity-30"
+            :class="prevDate ? 'text-sand-700 hover:bg-sand-100 cursor-pointer' : 'text-sand-400'"
+          >
+            <span class="sm:hidden">←</span>
+            <span class="hidden sm:inline">← Попередній</span>
+          </button>
+          <h1 class="text-xl font-medium text-sand-800 hidden sm:block">
+            {{ formatDate(entry.date) }}
+          </h1>
+          <button
+            @click="goTo(nextDate)"
+            :disabled="!nextDate"
+            class="px-2 sm:px-3 py-1.5 rounded-md text-sm border border-sand-200 disabled:opacity-30"
+            :class="nextDate ? 'text-sand-700 hover:bg-sand-100 cursor-pointer' : 'text-sand-400'"
+          >
+            <span class="sm:hidden">→</span>
+            <span class="hidden sm:inline">Наступний →</span>
+          </button>
+        </div>
       </div>
 
       <!-- Action buttons -->
@@ -196,21 +203,23 @@ watch(() => route.params.date, (newDate) => {
         <button
           v-if="!editing"
           @click="startEdit"
-          class="px-3 py-1.5 rounded-md text-sm border border-sand-200 text-sand-600 hover:bg-sand-100"
+          class="px-2.5 sm:px-3 py-1.5 rounded-md text-sm border border-sand-200 text-sand-600 hover:bg-sand-100"
         >
-          ✏️ Редагувати
+          <span class="sm:hidden">✏️</span>
+          <span class="hidden sm:inline">✏️ Редагувати</span>
         </button>
         <button
           v-if="!editing"
           @click="removeEntry"
-          class="px-3 py-1.5 rounded-md text-sm border border-sand-200 text-red-500 hover:bg-red-50 hover:border-red-200"
+          class="px-2.5 sm:px-3 py-1.5 rounded-md text-sm border border-sand-200 text-red-500 hover:bg-red-50 hover:border-red-200"
         >
-          🗑️ Видалити
+          <span class="sm:hidden">🗑️</span>
+          <span class="hidden sm:inline">🗑️ Видалити</span>
         </button>
       </div>
 
       <!-- Edit mode -->
-      <div v-if="editing" class="bg-white rounded-xl border border-sand-200 p-6 mb-4">
+      <div v-if="editing" class="bg-white rounded-xl border border-sand-200 p-4 sm:p-6 mb-4">
         <textarea
           v-model="editContent"
           class="w-full min-h-[300px] border border-sand-200 rounded-lg p-4 text-sm text-sand-800 resize-y focus:outline-none focus:ring-2 focus:ring-accent/30"
@@ -234,7 +243,7 @@ watch(() => route.params.date, (newDate) => {
       </div>
 
       <!-- Entry content (read mode) -->
-      <div v-else class="bg-white rounded-xl border border-sand-200 p-6 mb-4">
+      <div v-else class="bg-white rounded-xl border border-sand-200 p-4 sm:p-6 mb-4">
         <div class="prose" v-html="renderMarkdown(entry.content)"></div>
       </div>
 

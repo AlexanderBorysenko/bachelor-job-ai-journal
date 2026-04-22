@@ -18,28 +18,28 @@ function isActive(name: string) {
 
 <template>
   <nav class="border-b border-sand-200 bg-sand-50">
-    <div class="max-w-3xl mx-auto px-4 flex items-center justify-between h-14">
-      <div class="flex items-center gap-1">
-        <router-link to="/" class="text-lg font-semibold text-sand-800 mr-6">
+    <div class="max-w-3xl mx-auto px-3 sm:px-4 flex items-center justify-between h-12 sm:h-14">
+      <div class="flex items-center gap-0.5 sm:gap-1">
+        <router-link to="/" class="text-lg font-semibold text-sand-800 mr-4 sm:mr-6 hidden sm:block">
           AI Щоденник
         </router-link>
         <router-link
           to="/"
-          class="px-3 py-1.5 rounded-md text-sm"
+          class="px-2.5 sm:px-3 py-1.5 rounded-md text-sm"
           :class="isActive('diary') ? 'bg-sand-200 text-sand-900 font-medium' : 'text-sand-600 hover:text-sand-800'"
         >
           Щоденник
         </router-link>
         <router-link
           to="/buffer"
-          class="px-3 py-1.5 rounded-md text-sm"
+          class="px-2.5 sm:px-3 py-1.5 rounded-md text-sm"
           :class="isActive('buffer') ? 'bg-sand-200 text-sand-900 font-medium' : 'text-sand-600 hover:text-sand-800'"
         >
           Буфер
         </router-link>
         <router-link
           to="/highlights"
-          class="px-3 py-1.5 rounded-md text-sm"
+          class="px-2.5 sm:px-3 py-1.5 rounded-md text-sm"
           :class="isActive('highlights') ? 'bg-sand-200 text-sand-900 font-medium' : 'text-sand-600 hover:text-sand-800'"
         >
           Хайлайти

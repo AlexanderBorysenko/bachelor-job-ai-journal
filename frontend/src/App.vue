@@ -8,7 +8,7 @@ const route = useRoute()
 <template>
   <div class="min-h-screen bg-sand-50">
     <AppNav v-if="route.name !== 'login'" />
-    <main class="max-w-3xl mx-auto px-4 py-8">
+    <main class="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
       <router-view />
     </main>
   </div>

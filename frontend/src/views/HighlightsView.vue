@@ -144,19 +144,19 @@ onMounted(async () => {
       <div
         v-for="h in highlights"
         :key="h.id"
-        class="bg-white rounded-xl border border-sand-200 p-5"
+        class="bg-white rounded-xl border border-sand-200 p-3 sm:p-5"
       >
         <div class="flex items-start gap-3">
           <span class="text-xl mt-0.5">{{ getIcon(h.category) }}</span>
           <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1">
-              <h3 class="font-medium text-sand-800">{{ h.title }}</h3>
+            <div class="flex items-start sm:items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
+              <h3 class="font-medium text-sand-800 text-sm sm:text-base">{{ h.title }}</h3>
               <span class="text-xs px-2 py-0.5 rounded-full bg-sand-100 text-sand-500">
                 {{ h.category }}
               </span>
             </div>
             <p class="text-sm text-sand-600">{{ h.content }}</p>
-            <div class="flex items-center justify-between mt-3">
+            <div class="flex items-center justify-between mt-2 sm:mt-3 gap-2">
               <button
                 v-if="h.source_date"
                 @click="goToEntry(h.source_date)"

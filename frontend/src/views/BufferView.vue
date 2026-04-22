@@ -107,12 +107,12 @@ onMounted(() => loadBuffer(true))
 
 <template>
   <div>
-    <div class="flex items-center justify-between mb-6">
-      <h1 class="text-xl font-medium text-sand-800">Буфер повідомлень</h1>
+    <div class="flex items-center justify-between mb-4 sm:mb-6 gap-3">
+      <h1 class="text-lg sm:text-xl font-medium text-sand-800">Буфер повідомлень</h1>
       <button
         @click="doBake"
         :disabled="!canBake || messages.length === 0 || baking"
-        class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:hover:bg-accent"
+        class="px-3 sm:px-4 py-2 rounded-lg text-sm font-medium text-white bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:hover:bg-accent shrink-0"
       >
         {{ baking ? 'Запікаю...' : `🔥 Запікти (${messages.length})` }}
       </button>
@@ -159,7 +159,7 @@ onMounted(() => loadBuffer(true))
       <div
         v-for="msg in messages"
         :key="msg.id"
-        class="bg-white rounded-xl border border-sand-200 p-4"
+        class="bg-white rounded-xl border border-sand-200 p-3 sm:p-4"
       >
         <div class="flex items-start justify-between">
           <div class="flex items-center gap-2 text-sm text-sand-500 mb-2">
