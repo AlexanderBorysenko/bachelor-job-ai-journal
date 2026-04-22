@@ -172,7 +172,7 @@ watch(() => route.params.date, (newDate) => {
       <div v-if="showRaw && rawMessages.length" class="mt-3 space-y-2">
         <div
           v-for="msg in rawMessages"
-          :key="msg._id"
+          :key="msg.id"
           class="bg-sand-100 rounded-lg p-3 text-sm"
         >
           <div class="flex items-center gap-2 text-sand-500 mb-1">

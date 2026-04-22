@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { getHighlights, getHighlightCategories } from '../api'
 
 interface HighlightItem {
-  _id: string
+  id: string
   title: string
   category: string
   content: string
@@ -78,7 +78,7 @@ onMounted(async () => {
         @click="selectCategory(null)"
         class="px-3 py-1.5 rounded-full text-sm border transition-colors"
         :class="!selectedCategory
-          ? 'bg-sand-800 text-white border-sand-800'
+          ? 'bg-accent text-sand-50 border-accent'
           : 'text-sand-600 border-sand-200 hover:border-sand-300'"
       >
         Всі
@@ -89,7 +89,7 @@ onMounted(async () => {
         @click="selectCategory(cat.name)"
         class="px-3 py-1.5 rounded-full text-sm border transition-colors"
         :class="selectedCategory === cat.name
-          ? 'bg-sand-800 text-white border-sand-800'
+          ? 'bg-accent text-sand-50 border-accent'
           : 'text-sand-600 border-sand-200 hover:border-sand-300'"
       >
         {{ cat.icon }} {{ cat.name }}
@@ -111,7 +111,7 @@ onMounted(async () => {
     <div v-else class="space-y-3">
       <div
         v-for="h in highlights"
-        :key="h._id"
+        :key="h.id"
         class="bg-white rounded-xl border border-sand-200 p-5"
       >
         <div class="flex items-start gap-3">

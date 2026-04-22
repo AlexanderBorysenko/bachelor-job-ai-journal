@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-:root {
+@theme {
   --color-sand-50: #faf8f5;
   --color-sand-100: #f3efe8;
   --color-sand-200: #e8e0d4;
@@ -16,25 +16,11 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Lora', 'Georgia', 'Times New Roman', serif;
   background-color: var(--color-sand-50);
   color: var(--color-sand-900);
   margin: 0;
 }
-
-.bg-sand-50 { background-color: var(--color-sand-50); }
-.bg-sand-100 { background-color: var(--color-sand-100); }
-.bg-sand-200 { background-color: var(--color-sand-200); }
-.text-sand-500 { color: var(--color-sand-500); }
-.text-sand-600 { color: var(--color-sand-600); }
-.text-sand-700 { color: var(--color-sand-700); }
-.text-sand-800 { color: var(--color-sand-800); }
-.text-sand-900 { color: var(--color-sand-900); }
-.border-sand-200 { border-color: var(--color-sand-200); }
-.border-sand-300 { border-color: var(--color-sand-300); }
-.bg-accent { background-color: var(--color-accent); }
-.bg-accent-hover:hover { background-color: var(--color-accent-hover); }
-.text-accent { color: var(--color-accent); }
 
 .prose p { margin-bottom: 1rem; }
 .prose p:last-child { margin-bottom: 0; }

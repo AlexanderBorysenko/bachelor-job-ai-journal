@@ -74,13 +74,75 @@ Frontend nginx всередині контейнера сам проксює `/a
 
 ## 6. Зареєструвати webhook
 
+### Обмеження Telegram
+
+Telegram не доставляє webhook-запити на IP-адреси зі своїх власних діапазонів (`91.108.0.0/16`, `149.154.160.0/20`) — це захист від SSRF.
+
+Перевірити IP сервера: `dig your-domain.com +short`. Якщо IP починається з `91.108.` або `149.154.` — потрібен проксі (див. нижче).
+
+### Варіант A: Прямий webhook (якщо IP не в діапазоні Telegram)
+
 ```bash
-curl -X POST "https://api.telegram.org/bot<ТОКЕН>/setWebhook" \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://journal.example.com/api/webhook/telegram"}'
+curl -X POST "https://api.telegram.org/bot<ТОКЕН>/setWebhook" -H "Content-Type: application/json" -d '{"url": "https://journal.example.com/api/webhook/telegram"}'
 ```
 
-Перевірити: `curl "https://api.telegram.org/bot<ТОКЕН>/getWebhookInfo"`
+### Варіант B: Через Cloudflare Tunnel (якщо IP в діапазоні Telegram)
+
+1. Встановити `cloudflared`:
+
+```bash
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+chmod +x /usr/local/bin/cloudflared
+```
+
+2. Створити systemd-сервіс для постійної роботи:
+
+```bash
+sudo tee /etc/systemd/system/cloudflared-tunnel.service > /dev/null <<'EOF'
+[Unit]
+Description=Cloudflare Quick Tunnel for Telegram Webhook
+After=network.target docker.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://127.0.0.1:3004
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now cloudflared-tunnel
+```
+
+3. Отримати URL тунелю:
+
+```bash
+journalctl -u cloudflared-tunnel --no-pager -n 20 | grep "trycloudflare.com"
+```
+
+4. Встановити webhook на URL тунелю:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<ТОКЕН>/setWebhook" -H "Content-Type: application/json" -d '{"url": "https://TUNNEL-URL.trycloudflare.com/api/webhook/telegram"}'
+```
+
+> **Увага:** Quick Tunnel (без акаунта Cloudflare) генерує новий URL при кожному перезапуску сервісу.
+> Після перезавантаження сервера потрібно оновити webhook URL.
+> Для стабільного URL створіть безкоштовний Cloudflare-акаунт і налаштуйте Named Tunnel.
+
+### Перевірка webhook
+
+```bash
+curl "https://api.telegram.org/bot<ТОКЕН>/getWebhookInfo"
+```
+
+Очікувана відповідь: `"description":"Webhook was set"`, `"pending_update_count": 0`.
 
 ## 7. Перевірити роботу
 
@@ -123,6 +185,8 @@ docker compose exec backend python -m pytest tests/ -v
 |----------|---------|
 | `port already in use` | Змінити порт у `docker-compose.yml` або зупинити конфлікт |
 | Бот не відповідає | Перевірити webhook: `curl .../getWebhookInfo` |
+| Webhook: `Connection timed out` | IP сервера в діапазоні Telegram — налаштувати Cloudflare Tunnel (розділ 6B) |
+| Webhook URL змінився після перезапуску | Quick Tunnel дає новий URL — повторити `setWebhook` або перейти на Named Tunnel |
 | Telegram Login не працює | Перевірити домен у BotFather (`/setdomain`) |
 | Помилка транскрибації | Перевірити `OPENAI_API_KEY`, баланс на platform.openai.com |
 | Помилка запікання | Перевірити `ANTHROPIC_API_KEY`, баланс на console.anthropic.com |

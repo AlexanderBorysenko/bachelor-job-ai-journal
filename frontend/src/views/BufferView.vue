@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { getBuffer, updateMessage, deleteMessage, bake } from '../api'
 
 interface RawMsg {
-  _id: string
+  id: string
   source_type: string
   content: string
   classified_date: string
@@ -11,7 +11,7 @@ interface RawMsg {
 }
 
 interface AudioJob {
-  _id: string
+  id: string
   duration: number
   status: string
 }
@@ -40,7 +40,7 @@ async function loadBuffer() {
 }
 
 function startEdit(msg: RawMsg) {
-  editingId.value = msg._id
+  editingId.value = msg.id
   editContent.value = msg.content
 }
 
@@ -100,8 +100,7 @@ onMounted(loadBuffer)
       <button
         @click="doBake"
         :disabled="!canBake || messages.length === 0 || baking"
-        class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-accent disabled:opacity-40"
-        :class="{ 'bg-accent-hover:hover': canBake && messages.length > 0 }"
+        class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:hover:bg-accent"
       >
         {{ baking ? 'Запікаю...' : `🔥 Запікти (${messages.length})` }}
       </button>
@@ -147,7 +146,7 @@ onMounted(loadBuffer)
     <div v-else class="space-y-3">
       <div
         v-for="msg in messages"
-        :key="msg._id"
+        :key="msg.id"
         class="bg-white rounded-xl border border-sand-200 p-4"
       >
         <div class="flex items-start justify-between">
@@ -160,14 +159,14 @@ onMounted(loadBuffer)
           </div>
           <div class="flex gap-1">
             <button
-              v-if="editingId !== msg._id"
+              v-if="editingId !== msg.id"
               @click="startEdit(msg)"
               class="text-sand-400 hover:text-sand-600 text-sm px-2"
             >
               ✏️
             </button>
             <button
-              @click="remove(msg._id)"
+              @click="remove(msg.id)"
               class="text-sand-400 hover:text-red-500 text-sm px-2"
             >
               🗑️
@@ -176,7 +175,7 @@ onMounted(loadBuffer)
         </div>
 
         <!-- Edit mode -->
-        <div v-if="editingId === msg._id">
+        <div v-if="editingId === msg.id">
           <textarea
             v-model="editContent"
             class="w-full border border-sand-200 rounded-lg p-3 text-sm text-sand-800 resize-none focus:outline-none focus:ring-2 focus:ring-accent/30"
@@ -184,7 +183,7 @@ onMounted(loadBuffer)
           ></textarea>
           <div class="flex gap-2 mt-2">
             <button
-              @click="saveEdit(msg._id)"
+              @click="saveEdit(msg.id)"
               class="px-3 py-1 text-sm bg-accent text-white rounded-md"
             >
               Зберегти
