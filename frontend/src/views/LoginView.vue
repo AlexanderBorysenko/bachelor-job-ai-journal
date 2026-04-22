@@ -27,6 +27,9 @@ async function handleTelegramRedirect() {
     loading.value = true
     const decoded = atob(encoded)
     const authData = JSON.parse(decoded)
+    if (!authData || typeof authData !== 'object') {
+      throw new Error('Telegram auth declined')
+    }
     await auth.loginWithTelegram(authData)
     window.location.hash = ''
     router.push('/')
