@@ -1,0 +1,24 @@
+# Web framework
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+
+# MongoDB
+motor==3.7.1
+beanie==1.29.0
+
+# Telegram Bot
+aiogram==3.19.0
+
+# AI APIs
+anthropic==0.52.0
+openai==1.82.0
+
+# Auth
+python-jose[cryptography]==3.4.0
+passlib==1.7.4
+
+# Utils
+pydantic-settings==2.9.1
+python-multipart==0.0.20
+httpx==0.28.1
+pydub==0.25.1

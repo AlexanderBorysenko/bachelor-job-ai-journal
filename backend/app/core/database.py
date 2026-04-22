@@ -1,0 +1,21 @@
+from beanie import init_beanie
+from motor.motor_asyncio import AsyncIOMotorClient
+
+from app.core.config import settings
+
+
+async def init_db():
+    """Initialize MongoDB connection and Beanie ODM."""
+    client = AsyncIOMotorClient(settings.mongodb_url)
+    db = client[settings.mongodb_db_name]
+
+    from app.models.user import User
+    from app.models.audio_job import AudioJob
+    from app.models.raw_message import RawMessage
+    from app.models.entry import Entry
+    from app.models.highlight import Highlight
+
+    await init_beanie(
+        database=db,
+        document_models=[User, AudioJob, RawMessage, Entry, Highlight],
+    )
