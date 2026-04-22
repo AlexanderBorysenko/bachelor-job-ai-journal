@@ -53,6 +53,8 @@ def _build_system_prompt(custom_categories: list[CustomCategory] | None = None) 
 async def extract_highlights(entry: Entry, user: Optional[User] = None) -> list[Highlight]:
     """Extract highlights from a diary entry using Claude API.
 
+    Deletes any previous highlights for this entry before creating new ones.
+
     Args:
         entry: The Entry document to analyze.
         user: Optional User document (for custom categories).
@@ -60,6 +62,10 @@ async def extract_highlights(entry: Entry, user: Optional[User] = None) -> list[
     Returns:
         List of created Highlight documents.
     """
+    deleted = await Highlight.find({"source_entries": entry.id}).delete()
+    if deleted and deleted.deleted_count:
+        logger.info("Deleted %d old highlights for entry %s before re-extraction", deleted.deleted_count, entry.id)
+
     custom_cats = user.custom_categories if user else None
     system_prompt = _build_system_prompt(custom_cats)
 

@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getHighlights, getHighlightCategories } from '../api'
+import { useRouter } from 'vue-router'
+import { getHighlights, getHighlightCategories, deleteHighlight } from '../api'
 import { useEvents } from '../composables/useEvents'
+
+const router = useRouter()
 
 interface HighlightItem {
   id: string
   title: string
   category: string
   content: string
+  source_date?: string
   created_at: string
 }
 
@@ -62,6 +66,26 @@ function selectCategory(name: string | null) {
 
 function getIcon(category: string) {
   return categoryIcons[category] || '🏷️'
+}
+
+function formatDate(iso: string) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('uk-UA', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+function goToEntry(date: string) {
+  router.push({ name: 'diary-date', params: { date } })
+}
+
+async function removeHighlight(id: string) {
+  try {
+    await deleteHighlight(id)
+    highlights.value = highlights.value.filter(h => h.id !== id)
+    total.value--
+  } catch {}
 }
 
 useEvents({
@@ -124,7 +148,7 @@ onMounted(async () => {
       >
         <div class="flex items-start gap-3">
           <span class="text-xl mt-0.5">{{ getIcon(h.category) }}</span>
-          <div class="flex-1">
+          <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-1">
               <h3 class="font-medium text-sand-800">{{ h.title }}</h3>
               <span class="text-xs px-2 py-0.5 rounded-full bg-sand-100 text-sand-500">
@@ -132,6 +156,22 @@ onMounted(async () => {
               </span>
             </div>
             <p class="text-sm text-sand-600">{{ h.content }}</p>
+            <div class="flex items-center justify-between mt-3">
+              <button
+                v-if="h.source_date"
+                @click="goToEntry(h.source_date)"
+                class="text-xs text-sand-400 hover:text-accent transition-colors"
+              >
+                з запису від {{ formatDate(h.source_date) }}
+              </button>
+              <span v-else></span>
+              <button
+                @click="removeHighlight(h.id)"
+                class="text-xs text-sand-300 hover:text-red-400 transition-colors"
+              >
+                Видалити
+              </button>
+            </div>
           </div>
         </div>
       </div>

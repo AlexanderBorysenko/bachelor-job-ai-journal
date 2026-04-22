@@ -48,3 +48,6 @@ export const createCategory = (body: { name: string; description: string; icon?:
 
 export const getHighlight = (id: string) =>
   api.get(`/highlights/${id}`)
+
+export const deleteHighlight = (id: string) =>
+  api.delete(`/highlights/${id}`)

@@ -49,8 +49,15 @@ async def list_highlights(
         .to_list()
     )
 
+    items = []
+    for h in highlights:
+        item = h.model_dump(mode="json")
+        if h.date_range:
+            item["source_date"] = h.date_range.from_date.isoformat()
+        items.append(item)
+
     return {
-        "items": [h.model_dump(mode="json") for h in highlights],
+        "items": items,
         "total": total,
         "page": page,
         "per_page": per_page,
@@ -111,3 +118,15 @@ async def get_highlight(
     if not highlight or str(highlight.user_id) != user_id:
         raise HTTPException(status_code=404, detail="Хайлайт не знайдено")
     return highlight.model_dump(mode="json")
+
+
+@router.delete("/{highlight_id}", status_code=204)
+async def delete_highlight(
+    highlight_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Delete a specific highlight."""
+    highlight = await Highlight.get(highlight_id)
+    if not highlight or str(highlight.user_id) != user_id:
+        raise HTTPException(status_code=404, detail="Хайлайт не знайдено")
+    await highlight.delete()

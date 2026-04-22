@@ -1,6 +1,7 @@
 """Buffer API — manage raw messages before baking."""
 
 import asyncio
+import logging
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -13,6 +14,8 @@ from app.models.audio_job import AudioJob, AudioJobStatus
 from app.services.bake import bake_messages
 from app.api.dependencies import get_current_user_id
 from app.core.events import event_bus
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/buffer", tags=["Buffer"])
 
@@ -115,7 +118,9 @@ async def bake(user_id: str = Depends(get_current_user_id)):
 async def _run_bake(user_id: str, uid: ObjectId, pending: list):
     """Background bake task — publishes result via SSE."""
     try:
+        logger.info("Bake started for user %s (%d messages)", user_id, len(pending))
         entries = await bake_messages(user_id=uid, messages=pending)
+        logger.info("Bake completed for user %s: %d entries created", user_id, len(entries))
         await event_bus.publish(user_id, "bake:complete", {
             "entries_created": len(entries),
             "entries": [
@@ -124,4 +129,8 @@ async def _run_bake(user_id: str, uid: ObjectId, pending: list):
             ],
         })
     except Exception as exc:
-        await event_bus.publish(user_id, "bake:error", {"detail": str(exc)[:300]})
+        logger.exception("Bake failed for user %s: %s", user_id, exc)
+        try:
+            await event_bus.publish(user_id, "bake:error", {"detail": str(exc)[:300]})
+        except Exception:
+            logger.exception("Failed to publish bake:error event")
