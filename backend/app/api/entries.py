@@ -1,10 +1,11 @@
 """Entries API — diary entries with date navigation."""
 
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
 
 from app.models.entry import Entry
 from app.models.raw_message import RawMessage
@@ -107,6 +108,44 @@ async def get_entry_raw_messages(
     ).sort("+created_at").to_list()
 
     return [msg.model_dump(mode="json") for msg in messages]
+
+
+class UpdateEntryRequest(BaseModel):
+    content: str
+
+
+@router.patch("/{entry_id}")
+async def update_entry(
+    entry_id: str,
+    body: UpdateEntryRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Update an entry's content."""
+    entry = await Entry.get(entry_id)
+    if not entry or str(entry.user_id) != user_id:
+        raise HTTPException(status_code=404, detail="Запис не знайдено")
+
+    entry.content = body.content
+    entry.version += 1
+    entry.updated_at = datetime.utcnow()
+    await entry.save()
+
+    highlights = await Highlight.find({"source_entries": entry.id}).to_list()
+    return _entry_full(entry, highlights)
+
+
+@router.delete("/{entry_id}", status_code=204)
+async def delete_entry(
+    entry_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Delete an entry and its associated highlights."""
+    entry = await Entry.get(entry_id)
+    if not entry or str(entry.user_id) != user_id:
+        raise HTTPException(status_code=404, detail="Запис не знайдено")
+
+    await Highlight.find({"source_entries": entry.id}).delete()
+    await entry.delete()
 
 
 def _entry_preview(entry: Entry) -> dict:

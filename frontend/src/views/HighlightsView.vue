@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getHighlights, getHighlightCategories } from '../api'
+import { useEvents } from '../composables/useEvents'
 
 interface HighlightItem {
   id: string
@@ -62,6 +63,13 @@ function selectCategory(name: string | null) {
 function getIcon(category: string) {
   return categoryIcons[category] || '🏷️'
 }
+
+useEvents({
+  'bake:complete': () => {
+    loadCategories()
+    loadHighlights()
+  },
+})
 
 onMounted(async () => {
   await Promise.all([loadCategories(), loadHighlights()])

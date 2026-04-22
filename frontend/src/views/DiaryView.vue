@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getEntryByDate, getEntries, getEntryRaw } from '../api'
+import { getEntryByDate, getEntries, getEntryRaw, updateEntry, deleteEntry } from '../api'
+import { useEvents } from '../composables/useEvents'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,11 +15,53 @@ const showRaw = ref(false)
 const loading = ref(true)
 const availableDates = ref<string[]>([])
 const noEntry = ref(false)
+const editing = ref(false)
+const editContent = ref('')
+const saving = ref(false)
+
+function startEdit() {
+  editContent.value = entry.value.content
+  editing.value = true
+}
+
+function cancelEdit() {
+  editing.value = false
+}
+
+async function saveEdit() {
+  if (!entry.value) return
+  saving.value = true
+  try {
+    const { data } = await updateEntry(entry.value.id, { content: editContent.value })
+    entry.value = data
+    editing.value = false
+  } catch {}
+  finally {
+    saving.value = false
+  }
+}
+
+async function removeEntry() {
+  if (!entry.value) return
+  if (!confirm('Видалити цей запис? Цю дію неможливо скасувати.')) return
+  try {
+    await deleteEntry(entry.value.id)
+    if (prevDate.value) {
+      router.push(`/diary/${prevDate.value}`)
+    } else if (nextDate.value) {
+      router.push(`/diary/${nextDate.value}`)
+    } else {
+      entry.value = null
+      noEntry.value = true
+    }
+  } catch {}
+}
 
 async function loadEntry(date: string) {
   loading.value = true
   noEntry.value = false
   showRaw.value = false
+  editing.value = false
   rawMessages.value = []
 
   try {
@@ -80,6 +123,16 @@ function formatDate(isoDate: string) {
   })
 }
 
+useEvents({
+  'bake:complete': (data: any) => {
+    if (data.entries?.[0]?.date) {
+      loadEntry(data.entries[0].date)
+    } else {
+      loadLatest()
+    }
+  },
+})
+
 onMounted(() => {
   const dateParam = route.params.date as string
   if (dateParam) {
@@ -138,8 +191,50 @@ watch(() => route.params.date, (newDate) => {
         </button>
       </div>
 
-      <!-- Entry content -->
-      <div class="bg-white rounded-xl border border-sand-200 p-6 mb-4">
+      <!-- Action buttons -->
+      <div class="flex gap-2 mb-4 justify-end">
+        <button
+          v-if="!editing"
+          @click="startEdit"
+          class="px-3 py-1.5 rounded-md text-sm border border-sand-200 text-sand-600 hover:bg-sand-100"
+        >
+          ✏️ Редагувати
+        </button>
+        <button
+          v-if="!editing"
+          @click="removeEntry"
+          class="px-3 py-1.5 rounded-md text-sm border border-sand-200 text-red-500 hover:bg-red-50 hover:border-red-200"
+        >
+          🗑️ Видалити
+        </button>
+      </div>
+
+      <!-- Edit mode -->
+      <div v-if="editing" class="bg-white rounded-xl border border-sand-200 p-6 mb-4">
+        <textarea
+          v-model="editContent"
+          class="w-full min-h-[300px] border border-sand-200 rounded-lg p-4 text-sm text-sand-800 resize-y focus:outline-none focus:ring-2 focus:ring-accent/30"
+          rows="12"
+        ></textarea>
+        <div class="flex gap-2 mt-3">
+          <button
+            @click="saveEdit"
+            :disabled="saving"
+            class="px-4 py-2 text-sm bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-40"
+          >
+            {{ saving ? 'Збереження...' : 'Зберегти' }}
+          </button>
+          <button
+            @click="cancelEdit"
+            class="px-4 py-2 text-sm text-sand-600 border border-sand-200 rounded-md hover:bg-sand-100"
+          >
+            Скасувати
+          </button>
+        </div>
+      </div>
+
+      <!-- Entry content (read mode) -->
+      <div v-else class="bg-white rounded-xl border border-sand-200 p-6 mb-4">
         <div class="prose" v-html="renderMarkdown(entry.content)"></div>
       </div>
 

@@ -9,6 +9,7 @@ from app.models.audio_job import AudioJob, AudioJobStatus
 from app.services.classification import classify_date
 from app.services.transcription import process_audio_job
 from app.services.bake import bake_messages
+from app.core.events import event_bus
 
 
 def register_handlers(dp: Dispatcher):
@@ -79,13 +80,22 @@ async def cmd_bake(message: types.Message):
         {"user_id": user.id, "status": MessageStatus.PENDING}
     ).to_list()
 
+    user_id_str = str(user.id)
     try:
         entries = await bake_messages(user.id, pending)
+        await event_bus.publish(user_id_str, "bake:complete", {
+            "entries_created": len(entries),
+            "entries": [
+                {"id": str(e.id), "date": e.date.isoformat(), "preview": e.content[:200]}
+                for e in entries
+            ],
+        })
         dates_str = ", ".join(e.date.strftime("%d.%m") for e in entries)
         await message.answer(
             f"✅ Готово! Створено {len(entries)} запис(ів) за дати: {dates_str}"
         )
     except Exception as exc:
+        await event_bus.publish(user_id_str, "bake:error", {"detail": str(exc)[:300]})
         await message.answer(f"❌ Помилка запікання: {str(exc)[:200]}")
 
 
@@ -125,6 +135,7 @@ async def handle_voice(message: types.Message):
         status=AudioJobStatus.PENDING,
     )
     await job.insert()
+    await event_bus.publish(str(user.id), "buffer:update")
 
     await message.answer(f"🎙️ Отримано голосове ({voice.duration}с). Транскрибую...")
 
@@ -158,6 +169,7 @@ async def handle_text(message: types.Message):
         status=MessageStatus.PENDING,
     )
     await raw_msg.insert()
+    await event_bus.publish(str(user.id), "buffer:update")
 
     await message.answer("✅ Записано!")
 
@@ -173,8 +185,11 @@ async def _get_user(message: types.Message) -> User | None:
 
 async def _process_voice(job: AudioJob, bot_token: str, message: types.Message):
     """Background task: transcribe voice and notify user."""
+    user_id = str(job.user_id)
     try:
         await process_audio_job(job, bot_token)
+        await event_bus.publish(user_id, "buffer:update")
         await message.answer("✅ Голосове транскрибовано та записано!")
     except Exception as exc:
+        await event_bus.publish(user_id, "buffer:update")
         await message.answer(f"❌ Помилка транскрибації: {str(exc)[:200]}")

@@ -30,6 +30,12 @@ export const getEntry = (id: string) =>
 export const getEntryRaw = (id: string) =>
   api.get(`/entries/${id}/raw`)
 
+export const updateEntry = (id: string, body: { content: string }) =>
+  api.patch(`/entries/${id}`, body)
+
+export const deleteEntry = (id: string) =>
+  api.delete(`/entries/${id}`)
+
 // Highlights
 export const getHighlights = (params?: { category?: string; page?: number; per_page?: number }) =>
   api.get('/highlights', { params })

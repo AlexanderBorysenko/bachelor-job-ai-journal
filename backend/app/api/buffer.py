@@ -1,5 +1,7 @@
 """Buffer API — manage raw messages before baking."""
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
@@ -10,6 +12,7 @@ from app.models.raw_message import RawMessage, MessageStatus
 from app.models.audio_job import AudioJob, AudioJobStatus
 from app.services.bake import bake_messages
 from app.api.dependencies import get_current_user_id
+from app.core.events import event_bus
 
 router = APIRouter(prefix="/api/buffer", tags=["Buffer"])
 
@@ -79,11 +82,12 @@ async def delete_message(
     if not msg or str(msg.user_id) != user_id:
         raise HTTPException(status_code=404, detail="Повідомлення не знайдено")
     await msg.delete()
+    await event_bus.publish(user_id, "buffer:update")
 
 
-@router.post("/bake")
+@router.post("/bake", status_code=202)
 async def bake(user_id: str = Depends(get_current_user_id)):
-    """Bake all pending messages into diary entries."""
+    """Start baking pending messages — runs in background, notifies via SSE."""
     uid = ObjectId(user_id)
 
     processing_statuses = [AudioJobStatus.DOWNLOADING, AudioJobStatus.TRANSCRIBING]
@@ -104,12 +108,20 @@ async def bake(user_id: str = Depends(get_current_user_id)):
     if not pending:
         raise HTTPException(status_code=422, detail="Буфер порожній — нічого запікати")
 
-    entries = await bake_messages(user_id=uid, messages=pending)
+    asyncio.create_task(_run_bake(user_id, uid, pending))
+    return {"status": "started", "message_count": len(pending)}
 
-    return {
-        "entries_created": len(entries),
-        "entries": [
-            {"id": str(e.id), "date": e.date.isoformat(), "preview": e.content[:200]}
-            for e in entries
-        ],
-    }
+
+async def _run_bake(user_id: str, uid: ObjectId, pending: list):
+    """Background bake task — publishes result via SSE."""
+    try:
+        entries = await bake_messages(user_id=uid, messages=pending)
+        await event_bus.publish(user_id, "bake:complete", {
+            "entries_created": len(entries),
+            "entries": [
+                {"id": str(e.id), "date": e.date.isoformat(), "preview": e.content[:200]}
+                for e in entries
+            ],
+        })
+    except Exception as exc:
+        await event_bus.publish(user_id, "bake:error", {"detail": str(exc)[:300]})

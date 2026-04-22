@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getBuffer, updateMessage, deleteMessage, bake } from '../api'
+import { useEvents } from '../composables/useEvents'
 
 interface RawMsg {
   id: string
@@ -25,8 +26,8 @@ const bakeResult = ref<any>(null)
 const editingId = ref<string | null>(null)
 const editContent = ref('')
 
-async function loadBuffer() {
-  loading.value = true
+async function loadBuffer(showSpinner = false) {
+  if (showSpinner) loading.value = true
   try {
     const { data } = await getBuffer()
     messages.value = data.messages
@@ -68,17 +69,14 @@ async function doBake() {
   baking.value = true
   bakeResult.value = null
   try {
-    const { data } = await bake()
-    bakeResult.value = data
-    await loadBuffer()
+    await bake()
   } catch (err: any) {
+    baking.value = false
     if (err.response?.status === 409) {
       alert(err.response.data.detail)
     } else if (err.response?.status === 422) {
       alert(err.response.data.detail)
     }
-  } finally {
-    baking.value = false
   }
 }
 
@@ -90,7 +88,21 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
 }
 
-onMounted(loadBuffer)
+useEvents({
+  'buffer:update': () => loadBuffer(),
+  'bake:complete': (data: any) => {
+    bakeResult.value = data
+    baking.value = false
+    loadBuffer()
+  },
+  'bake:error': (data: any) => {
+    baking.value = false
+    alert(data.detail || 'Помилка запікання')
+    loadBuffer()
+  },
+})
+
+onMounted(() => loadBuffer(true))
 </script>
 
 <template>
