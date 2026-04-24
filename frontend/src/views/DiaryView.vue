@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { marked } from 'marked'
 import { getEntryByDate, getEntries, getEntryRaw, updateEntry, deleteEntry } from '../api'
 import { useEvents } from '../composables/useEvents'
 
@@ -18,6 +19,11 @@ const noEntry = ref(false)
 const editing = ref(false)
 const editContent = ref('')
 const saving = ref(false)
+
+function scrollToHeading(id: string) {
+  const el = document.getElementById(id)
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 function startEdit() {
   editContent.value = entry.value.content
@@ -122,6 +128,43 @@ function formatDate(isoDate: string) {
     day: 'numeric',
   })
 }
+
+interface TocItem {
+  id: string
+  text: string
+  level: number
+}
+
+const tocItems = computed<TocItem[]>(() => {
+  if (!entry.value?.content) return []
+  const headingRegex = /^(#{2,3})\s+(.+)$/gm
+  const items: TocItem[] = []
+  let match
+  while ((match = headingRegex.exec(entry.value.content)) !== null) {
+    const text = match[2].trim()
+    const id = text
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s-]/gu, '')
+      .replace(/\s+/g, '-')
+    items.push({ id, text, level: match[1].length })
+  }
+  return items
+})
+
+const renderedContent = computed(() => {
+  if (!entry.value?.content) return ''
+  const renderer = new marked.Renderer()
+  renderer.heading = function ({ tokens, depth }) {
+    const text = this.parser.parseInline(tokens)
+    const plain = text.replace(/<[^>]*>/g, '')
+    const id = plain
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s-]/gu, '')
+      .replace(/\s+/g, '-')
+    return `<h${depth} id="${id}">${text}</h${depth}>`
+  }
+  return marked(entry.value.content, { renderer }) as string
+})
 
 useEvents({
   'bake:complete': (data: any) => {
@@ -244,7 +287,22 @@ watch(() => route.params.date, (newDate) => {
 
       <!-- Entry content (read mode) -->
       <div v-else class="bg-white rounded-xl border border-sand-200 p-4 sm:p-6 mb-4">
-        <div class="prose" v-html="renderMarkdown(entry.content)"></div>
+        <!-- Table of Contents -->
+        <nav v-if="tocItems.length > 1" class="mb-6 pb-4 border-b border-sand-200">
+          <p class="text-xs font-semibold uppercase tracking-wider text-sand-400 mb-2">Зміст</p>
+          <ul class="space-y-1">
+            <li v-for="item in tocItems" :key="item.id" :class="item.level === 3 ? 'ml-4' : ''">
+              <a
+                :href="'#' + item.id"
+                class="text-sm text-sand-600 hover:text-accent transition-colors"
+                @click.prevent="scrollToHeading(item.id)"
+              >
+                {{ item.text }}
+              </a>
+            </li>
+          </ul>
+        </nav>
+        <div class="diary-content" v-html="renderedContent"></div>
       </div>
 
       <!-- Highlights -->
@@ -290,19 +348,53 @@ watch(() => route.params.date, (newDate) => {
   </div>
 </template>
 
-<script lang="ts">
-// Simple markdown to HTML (paragraphs and bold)
-function renderMarkdown(md: string): string {
-  if (!md) return ''
-  return md
-    .split('\n\n')
-    .map(p => p.trim())
-    .filter(p => p)
-    .map(p => `<p>${p.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</p>`)
-    .join('')
+<style scoped>
+.diary-content :deep(h2) {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-sand-800);
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--color-sand-200);
 }
 
-export default {
-  methods: { renderMarkdown },
+.diary-content :deep(h2:first-child) {
+  margin-top: 0;
 }
-</script>
+
+.diary-content :deep(h3) {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--color-sand-700);
+  margin-top: 1rem;
+  margin-bottom: 0.375rem;
+}
+
+.diary-content :deep(p) {
+  margin-bottom: 0.75rem;
+  line-height: 1.7;
+  color: var(--color-sand-800);
+}
+
+.diary-content :deep(strong) {
+  font-weight: 600;
+}
+
+.diary-content :deep(ul),
+.diary-content :deep(ol) {
+  margin-bottom: 0.75rem;
+  padding-left: 1.5rem;
+}
+
+.diary-content :deep(li) {
+  margin-bottom: 0.25rem;
+  line-height: 1.6;
+}
+
+.diary-content :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--color-sand-200);
+  margin: 1.25rem 0;
+}
+</style>

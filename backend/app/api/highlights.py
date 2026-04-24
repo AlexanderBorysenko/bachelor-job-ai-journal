@@ -7,24 +7,63 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from app.models.highlight import Highlight
-from app.models.user import User, CustomCategory
+from app.models.user import User, CustomCategory, CategoryOverride
 from app.api.dependencies import get_current_user_id, get_current_user
 
 router = APIRouter(prefix="/api/highlights", tags=["Highlights"])
 
 
 SYSTEM_CATEGORIES = [
-    {"name": "idea", "description": "Креативні думки, плани, задуми", "icon": "💡", "is_system": True},
-    {"name": "story", "description": "Події, подорожі, зустрічі, визначні моменти", "icon": "📖", "is_system": True},
-    {"name": "mood", "description": "Емоції, настрій, рефлексія", "icon": "🧠", "is_system": True},
-    {"name": "insight", "description": "Висновки, усвідомлення, «аха-моменти»", "icon": "⚡", "is_system": True},
+    {
+        "name": "idea",
+        "description": "Креативні думки, плани, задуми",
+        "prompt": "креативні думки, плани, задуми, бізнес-ідеї",
+        "icon": "💡",
+        "is_system": True,
+    },
+    {
+        "name": "story",
+        "description": "Події, подорожі, зустрічі, визначні моменти",
+        "prompt": "визначні події, подорожі, зустрічі, історії варті запам'ятовування",
+        "icon": "📖",
+        "is_system": True,
+    },
+    {
+        "name": "mood",
+        "description": "Емоції, настрій, рефлексія",
+        "prompt": "емоційний стан, рефлексія, психологічні спостереження",
+        "icon": "🧠",
+        "is_system": True,
+    },
+    {
+        "name": "insight",
+        "description": "Висновки, усвідомлення, «аха-моменти»",
+        "prompt": "висновки, усвідомлення, «аха-моменти», життєві уроки, зсуви у світогляді, нове розуміння себе або життя",
+        "icon": "⚡",
+        "is_system": True,
+    },
 ]
+
+
+def _get_override(user: User, name: str) -> Optional[CategoryOverride]:
+    for ov in (user.category_overrides or []):
+        if ov.name == name:
+            return ov
+    return None
 
 
 class CreateCategoryRequest(BaseModel):
     name: str
     description: str
+    prompt: str = ""
     icon: Optional[str] = None
+
+
+class UpdateCategoryRequest(BaseModel):
+    description: Optional[str] = None
+    prompt: Optional[str] = None
+    icon: Optional[str] = None
+    enabled: Optional[bool] = None
 
 
 @router.get("")
@@ -66,14 +105,27 @@ async def list_highlights(
 
 @router.get("/categories")
 async def list_categories(user: User = Depends(get_current_user)):
-    """List system + user-defined categories."""
-    categories = list(SYSTEM_CATEGORIES)
-    for cat in (user.custom_categories or []):
+    """List system + user-defined categories with overrides applied."""
+    categories = []
+    for sys_cat in SYSTEM_CATEGORIES:
+        cat = dict(sys_cat)
+        override = _get_override(user, cat["name"])
+        if override:
+            if override.prompt is not None:
+                cat["prompt"] = override.prompt
+            cat["enabled"] = override.enabled
+        else:
+            cat["enabled"] = True
+        categories.append(cat)
+
+    for custom in (user.custom_categories or []):
         categories.append({
-            "name": cat.name,
-            "description": cat.description,
-            "icon": cat.icon or "🏷️",
+            "name": custom.name,
+            "description": custom.description,
+            "prompt": custom.prompt or "",
+            "icon": custom.icon or "🏷️",
             "is_system": False,
+            "enabled": custom.enabled,
         })
     return categories
 
@@ -84,7 +136,6 @@ async def create_category(
     user: User = Depends(get_current_user),
 ):
     """Create a custom highlight category."""
-    # Check for duplicate
     existing_names = [c.name for c in (user.custom_categories or [])]
     system_names = [c["name"] for c in SYSTEM_CATEGORIES]
     if body.name in existing_names or body.name in system_names:
@@ -93,6 +144,7 @@ async def create_category(
     new_cat = CustomCategory(
         name=body.name,
         description=body.description,
+        prompt=body.prompt,
         icon=body.icon,
     )
     if not user.custom_categories:
@@ -103,9 +155,90 @@ async def create_category(
     return {
         "name": new_cat.name,
         "description": new_cat.description,
-        "icon": new_cat.icon,
+        "prompt": new_cat.prompt,
+        "icon": new_cat.icon or "🏷️",
         "is_system": False,
+        "enabled": True,
     }
+
+
+@router.put("/categories/{category_name}")
+async def update_category(
+    category_name: str,
+    body: UpdateCategoryRequest,
+    user: User = Depends(get_current_user),
+):
+    """Update a category. For system categories, stores an override."""
+    system_names = [c["name"] for c in SYSTEM_CATEGORIES]
+
+    if category_name in system_names:
+        if not user.category_overrides:
+            user.category_overrides = []
+        override = _get_override(user, category_name)
+        if override:
+            if body.prompt is not None:
+                override.prompt = body.prompt
+            if body.enabled is not None:
+                override.enabled = body.enabled
+        else:
+            override = CategoryOverride(
+                name=category_name,
+                prompt=body.prompt,
+                enabled=body.enabled if body.enabled is not None else True,
+            )
+            user.category_overrides.append(override)
+        await user.save()
+
+        sys_cat = next(c for c in SYSTEM_CATEGORIES if c["name"] == category_name)
+        return {
+            "name": category_name,
+            "description": sys_cat["description"],
+            "prompt": override.prompt if override.prompt is not None else sys_cat["prompt"],
+            "icon": sys_cat["icon"],
+            "is_system": True,
+            "enabled": override.enabled,
+        }
+
+    custom = next((c for c in (user.custom_categories or []) if c.name == category_name), None)
+    if not custom:
+        raise HTTPException(status_code=404, detail="Категорію не знайдено")
+
+    if body.description is not None:
+        custom.description = body.description
+    if body.prompt is not None:
+        custom.prompt = body.prompt
+    if body.icon is not None:
+        custom.icon = body.icon
+    if body.enabled is not None:
+        custom.enabled = body.enabled
+    await user.save()
+
+    return {
+        "name": custom.name,
+        "description": custom.description,
+        "prompt": custom.prompt,
+        "icon": custom.icon or "🏷️",
+        "is_system": False,
+        "enabled": custom.enabled,
+    }
+
+
+@router.delete("/categories/{category_name}", status_code=204)
+async def delete_category(
+    category_name: str,
+    user: User = Depends(get_current_user),
+):
+    """Delete a custom category. System categories cannot be deleted."""
+    system_names = [c["name"] for c in SYSTEM_CATEGORIES]
+    if category_name in system_names:
+        raise HTTPException(status_code=400, detail="Системні категорії не можна видаляти")
+
+    custom = next((c for c in (user.custom_categories or []) if c.name == category_name), None)
+    if not custom:
+        raise HTTPException(status_code=404, detail="Категорію не знайдено")
+
+    user.custom_categories = [c for c in user.custom_categories if c.name != category_name]
+    await user.save()
 
 
 @router.get("/{highlight_id}")

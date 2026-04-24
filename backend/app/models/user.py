@@ -10,7 +10,17 @@ class CustomCategory(BaseModel):
 
     name: str
     description: str
+    prompt: str = ""
     icon: Optional[str] = None
+    enabled: bool = True
+
+
+class CategoryOverride(BaseModel):
+    """User override for a system highlight category."""
+
+    name: str
+    prompt: Optional[str] = None
+    enabled: bool = True
 
 
 class User(Document):
@@ -20,6 +30,7 @@ class User(Document):
     username: Optional[str] = None
     display_name: str
     custom_categories: list[CustomCategory] = Field(default_factory=list)
+    category_overrides: list[CategoryOverride] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:

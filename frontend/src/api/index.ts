@@ -43,8 +43,14 @@ export const getHighlights = (params?: { category?: string; page?: number; per_p
 export const getHighlightCategories = () =>
   api.get('/highlights/categories')
 
-export const createCategory = (body: { name: string; description: string; icon?: string }) =>
+export const createCategory = (body: { name: string; description: string; prompt?: string; icon?: string }) =>
   api.post('/highlights/categories', body)
+
+export const updateCategory = (name: string, body: { description?: string; prompt?: string; icon?: string; enabled?: boolean }) =>
+  api.put(`/highlights/categories/${name}`, body)
+
+export const deleteCategory = (name: string) =>
+  api.delete(`/highlights/categories/${name}`)
 
 export const getHighlight = (id: string) =>
   api.get(`/highlights/${id}`)
