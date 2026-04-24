@@ -4,14 +4,23 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import init_db
+from app.core.config import settings
+
+
+async def _register_webhook():
+    if settings.telegram_bot_token and settings.telegram_webhook_url:
+        import httpx
+        url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/setWebhook"
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, json={"url": settings.telegram_webhook_url})
+            print(f"Webhook registration: {resp.json()}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     await init_db()
+    await _register_webhook()
     yield
-    # Shutdown (cleanup if needed)
 
 
 app = FastAPI(
