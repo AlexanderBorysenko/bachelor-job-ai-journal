@@ -44,6 +44,13 @@ function isActive(name: string) {
         >
           Хайлайти
         </router-link>
+        <router-link
+          to="/settings"
+          class="px-2.5 sm:px-3 py-1.5 rounded-md text-sm"
+          :class="isActive('settings') ? 'bg-sand-200 text-sand-900 font-medium' : 'text-sand-600 hover:text-sand-800'"
+        >
+          ⚙️
+        </router-link>
       </div>
       <button
         @click="logout"
