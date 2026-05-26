@@ -57,3 +57,13 @@ export const getHighlight = (id: string) =>
 
 export const deleteHighlight = (id: string) =>
   api.delete(`/highlights/${id}`)
+
+// Settings
+export const getSettings = () =>
+  api.get('/settings')
+
+export const updateSettings = (body: { bake_style_prompt?: string | null }) =>
+  api.patch('/settings', body)
+
+export const previewStyle = (body: { style_prompt?: string | null }) =>
+  api.post('/settings/preview-style', body)
