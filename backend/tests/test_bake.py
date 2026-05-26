@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from app.models.raw_message import RawMessage, SourceType, MessageStatus
 from app.models.entry import Entry
 from app.models.user import User
-from app.services.bake import bake_messages, _format_messages
+from app.services.bake import bake_messages, _format_messages, build_system_prompt, CORE_RULES, DEFAULT_STYLE
 
 
 @pytest.mark.asyncio
@@ -134,3 +134,26 @@ class TestBakeMessages:
         # Verify only 1 entry for this date (not a duplicate)
         all_entries = await Entry.find({"date": date(2026, 4, 22)}).to_list()
         assert len(all_entries) == 1
+
+
+@pytest.mark.asyncio
+class TestBuildSystemPrompt:
+    async def test_none_returns_core_plus_default(self):
+        result = build_system_prompt(None)
+        assert CORE_RULES in result
+        assert DEFAULT_STYLE in result
+
+    async def test_custom_style_replaces_default(self):
+        custom = "Пиши коротко, як SMS."
+        result = build_system_prompt(custom)
+        assert CORE_RULES in result
+        assert custom in result
+        assert DEFAULT_STYLE not in result
+
+    async def test_empty_string_treated_as_none(self):
+        result = build_system_prompt("")
+        assert DEFAULT_STYLE in result
+
+    async def test_whitespace_only_treated_as_none(self):
+        result = build_system_prompt("   ")
+        assert DEFAULT_STYLE in result
