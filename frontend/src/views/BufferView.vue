@@ -1,24 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getBuffer, updateMessage, deleteMessage, bake } from '../api'
+import { getBuffer, bake } from '../api'
 import { useEvents } from '../composables/useEvents'
-
-interface MediaFileRef {
-  shortcode: string
-  kind: string
-  status: string
-  has_poster: boolean
-}
-
-interface RawMsg {
-  id: string
-  source_type: string
-  content: string
-  descriptive?: string | null
-  media_files?: MediaFileRef[]
-  classified_date: string
-  created_at: string
-}
+import type { RawMessage } from '../types/message'
+import MessageCard from '../components/message/MessageCard.vue'
 
 interface AudioJob {
   id: string
@@ -36,15 +21,14 @@ interface ActiveBake {
   started_at: string
 }
 
-const messages = ref<RawMsg[]>([])
+const messages = ref<RawMessage[]>([])
 const processingAudio = ref<AudioJob[]>([])
 const canBake = ref(false)
 const loading = ref(true)
 const activeBake = ref<ActiveBake | null>(null)
 const isBaking = computed(() => activeBake.value !== null)
 const bakeResult = ref<any>(null)
-const editingId = ref<string | null>(null)
-const editContent = ref('')
+const openId = ref<string | null>(null)
 
 async function loadBuffer(showSpinner = false) {
   if (showSpinner) loading.value = true
@@ -61,30 +45,9 @@ async function loadBuffer(showSpinner = false) {
   }
 }
 
-function startEdit(msg: RawMsg) {
-  if (isBaking.value) return
-  editingId.value = msg.id
-  editContent.value = msg.content
-}
-
-async function saveEdit(id: string) {
-  try {
-    await updateMessage(id, { content: editContent.value })
-    editingId.value = null
-    await loadBuffer()
-  } catch {}
-}
-
-function cancelEdit() {
-  editingId.value = null
-}
-
-async function remove(id: string) {
-  if (!confirm('Видалити повідомлення?')) return
-  try {
-    await deleteMessage(id)
-    await loadBuffer()
-  } catch {}
+function onChanged() {
+  openId.value = null
+  loadBuffer()
 }
 
 async function doBake() {
@@ -97,14 +60,6 @@ async function doBake() {
       alert(err.response.data.detail)
     }
   }
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
 }
 
 useEvents({
@@ -213,88 +168,16 @@ onMounted(() => loadBuffer(true))
 
     <!-- Messages list -->
     <div v-else class="space-y-3" :class="{ 'opacity-60 pointer-events-none': isBaking }">
-      <div
+      <MessageCard
         v-for="msg in messages"
         :key="msg.id"
-        class="bg-white rounded-xl border border-sand-200 p-3 sm:p-4"
-      >
-        <div class="flex items-start justify-between">
-          <div class="flex items-center gap-2 text-sm text-sand-500 mb-2">
-            <span>{{ msg.source_type === 'voice' ? '🎙️' : msg.source_type === 'media' ? '📎' : '✏️' }}</span>
-            <span>{{ formatTime(msg.created_at) }}</span>
-            <span class="px-2 py-0.5 rounded-full bg-sand-100 text-xs">
-              {{ formatDate(msg.classified_date) }}
-            </span>
-          </div>
-          <div v-if="!isBaking" class="flex gap-1">
-            <button
-              v-if="editingId !== msg.id"
-              @click="startEdit(msg)"
-              class="text-sand-400 hover:text-sand-600 text-sm px-2"
-            >
-              ✏️
-            </button>
-            <button
-              @click="remove(msg.id)"
-              class="text-sand-400 hover:text-red-500 text-sm px-2"
-            >
-              🗑️
-            </button>
-          </div>
-        </div>
-
-        <!-- Edit mode -->
-        <div v-if="editingId === msg.id">
-          <textarea
-            v-model="editContent"
-            class="w-full border border-sand-200 rounded-lg p-3 text-sm text-sand-800 resize-none focus:outline-none focus:ring-2 focus:ring-accent/30"
-            rows="3"
-          ></textarea>
-          <div class="flex gap-2 mt-2">
-            <button
-              @click="saveEdit(msg.id)"
-              class="px-3 py-1 text-sm bg-accent text-white rounded-md"
-            >
-              Зберегти
-            </button>
-            <button
-              @click="cancelEdit"
-              class="px-3 py-1 text-sm text-sand-600 border border-sand-200 rounded-md"
-            >
-              Скасувати
-            </button>
-          </div>
-        </div>
-
-        <!-- Display mode -->
-        <template v-else>
-          <div v-if="msg.source_type === 'media'">
-            <div class="flex flex-wrap gap-2 mb-2">
-              <div
-                v-for="f in msg.media_files"
-                :key="f.shortcode"
-                class="w-20 h-20 rounded-lg overflow-hidden bg-sand-100 flex items-center justify-center"
-              >
-                <img
-                  v-if="f.status === 'ready' && f.kind === 'photo'"
-                  :src="`/api/media/${f.shortcode}`"
-                  class="w-full h-full object-cover"
-                />
-                <img
-                  v-else-if="f.has_poster"
-                  :src="`/api/media/${f.shortcode}/poster`"
-                  class="w-full h-full object-cover"
-                />
-                <span v-else class="text-2xl">{{ f.kind === 'photo' ? '🖼️' : '🎬' }}</span>
-              </div>
-            </div>
-            <p class="text-sand-700 text-sm italic">
-              {{ msg.descriptive || 'Без опису' }}
-            </p>
-          </div>
-          <p v-else class="text-sand-800 text-sm">{{ msg.content }}</p>
-        </template>
-      </div>
+        :message="msg"
+        :disabled="isBaking"
+        :open="openId === msg.id"
+        @open="openId = msg.id"
+        @close="openId = null"
+        @changed="onChanged"
+      />
     </div>
   </div>
 </template>

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { marked } from 'marked'
-import { getEntryByDate, getEntries, getEntryRaw, updateEntry, deleteEntry } from '../api'
+import { getEntryByDate, getEntries, getEntryRaw, updateEntry, deleteEntry, rebakeEntry } from '../api'
 import { useEvents } from '../composables/useEvents'
 import { injectMacros } from '../utils/macros'
 
@@ -20,6 +20,8 @@ const noEntry = ref(false)
 const editing = ref(false)
 const editContent = ref('')
 const saving = ref(false)
+const rebaking = ref(false)
+const bakeLabel = ref('')
 
 function scrollToHeading(id: string) {
   const el = document.getElementById(id)
@@ -62,6 +64,22 @@ async function removeEntry() {
       noEntry.value = true
     }
   } catch {}
+}
+
+async function rebake() {
+  if (!entry.value) return
+  if (!confirm('Перезапекти запис заново? Поточний текст, включно з ручними правками, буде замінено.')) return
+  try {
+    await rebakeEntry(entry.value.id)
+    rebaking.value = true
+    bakeLabel.value = 'Запускаю перезапікання…'
+  } catch (err: any) {
+    if (err.response?.status === 409) {
+      alert('Запікання вже виконується')
+    } else {
+      alert('Не вдалося запустити перезапікання')
+    }
+  }
 }
 
 async function loadEntry(date: string) {
@@ -193,12 +211,24 @@ const renderedContent = computed(() => {
 })
 
 useEvents({
+  'bake:started': () => { rebaking.value = true },
+  'bake:progress': (data: any) => {
+    rebaking.value = true
+    bakeLabel.value = data.phase === 'highlights' ? 'Вилучення хайлайтів…' : (data.label || 'Перезапікання…')
+  },
   'bake:complete': (data: any) => {
+    rebaking.value = false
+    bakeLabel.value = ''
     if (data.entries?.[0]?.date) {
       loadEntry(data.entries[0].date)
     } else {
       loadLatest()
     }
+  },
+  'bake:error': (data: any) => {
+    rebaking.value = false
+    bakeLabel.value = ''
+    alert(`Помилка перезапікання: ${data?.detail || ''}`)
   },
 })
 
@@ -357,7 +387,7 @@ watch(() => route.params.date, (newDate) => {
         {{ showRaw ? 'Сховати оригінали' : `Показати оригінали (${entry.source_messages_count})` }}
       </button>
 
-      <div v-if="showRaw && rawMessages.length" class="mt-3 space-y-2">
+      <div v-if="showRaw" class="mt-3 space-y-2">
         <div
           v-for="msg in rawMessages"
           :key="msg.id"
@@ -368,6 +398,16 @@ watch(() => route.params.date, (newDate) => {
             <span>{{ new Date(msg.created_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }) }}</span>
           </div>
           <p class="text-sand-800">{{ msg.content }}</p>
+        </div>
+
+        <div class="pt-2">
+          <button
+            @click="rebake"
+            :disabled="rebaking"
+            class="px-3 py-2 text-sm rounded-md border border-sand-200 text-sand-700 hover:bg-sand-100 disabled:opacity-40"
+          >
+            {{ rebaking ? (bakeLabel || 'Перезапікання…') : '🔁 Перезапекти' }}
+          </button>
         </div>
       </div>
     </div>

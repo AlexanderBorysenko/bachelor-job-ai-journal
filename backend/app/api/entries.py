@@ -1,17 +1,20 @@
 """Entries API — diary entries with date navigation."""
 
-import re
 from datetime import date, datetime
 from typing import Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 
 from app.models.entry import Entry
 from app.models.raw_message import RawMessage
 from app.models.highlight import Highlight
 from app.models.media_file import MediaFile
+from app.services.macros import collect_shortcodes
+from app.services.bake import rebake_entry
+from app.services.bake_orchestrator import active_bake, launch_bake, serialize_bake_job
 from app.api.dependencies import get_current_user_id
 
 router = APIRouter(prefix="/api/entries", tags=["Entries"])
@@ -112,6 +115,36 @@ async def get_entry_raw_messages(
     return [msg.model_dump(mode="json") for msg in messages]
 
 
+@router.post("/{entry_id}/rebake", status_code=202)
+async def rebake(
+    entry_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Regenerate an entry from scratch from its own source messages (tracked via BakeJob).
+
+    Replaces the entry's content (discarding manual edits). Shares the bake-job
+    concurrency guard, progress, and SSE events with the buffer bake.
+    """
+    uid = ObjectId(user_id)
+    entry = await Entry.get(entry_id)
+    if not entry or str(entry.user_id) != user_id:
+        raise HTTPException(status_code=404, detail="Запис не знайдено")
+    if not entry.source_messages:
+        raise HTTPException(status_code=422, detail="Немає оригіналів для перезапікання")
+    if await active_bake(uid) is not None:
+        raise HTTPException(status_code=409, detail="Запікання вже виконується")
+
+    try:
+        job = await launch_bake(
+            uid, user_id, total_steps=1,
+            engine=lambda report: rebake_entry(uid, entry, report),
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Запікання вже виконується")
+
+    return serialize_bake_job(job)
+
+
 class UpdateEntryRequest(BaseModel):
     content: str
 
@@ -151,7 +184,7 @@ async def delete_entry(
 
 
 async def _media_manifest(content: str, user_id) -> dict:
-    shortcodes = set(re.findall(r"attach:([A-Za-z0-9_]+)", content or ""))
+    shortcodes = collect_shortcodes(content)
     if not shortcodes:
         return {}
     files = await MediaFile.find(
