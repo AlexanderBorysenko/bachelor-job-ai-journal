@@ -24,6 +24,25 @@ def _encode(payload: dict) -> str:
     return base64.b64encode(data).decode("ascii")
 
 
+def collect_shortcodes(content: str) -> set[str]:
+    """All media shortcodes a rendered entry references: inline
+    ``![](attach:CODE)`` placeholders plus codes carried inside macro payloads
+    (gallery ``images`` / figure ``image``). The web manifest must cover both,
+    otherwise macro images are treated as not-ready and silently drop out."""
+    codes: set[str] = set(re.findall(r"attach:([A-Za-z0-9_]+)", content or ""))
+    for m in MACRO_RE.finditer(content or ""):
+        payload = _decode_payload(m.group(2))
+        if not isinstance(payload, dict):
+            continue
+        image = payload.get("image")
+        if isinstance(image, str):
+            codes.add(image)
+        for code in payload.get("images") or []:
+            if isinstance(code, str):
+                codes.add(code)
+    return codes
+
+
 def process_macros(content: str, ctx: dict) -> tuple[str, set]:
     """Validate + normalize every macro block. Returns (content, shortcodes_used)."""
     used: set[str] = set()

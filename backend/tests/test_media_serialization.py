@@ -1,5 +1,8 @@
 """Tests for media manifests in entry/buffer serialization."""
 
+import base64
+import json
+
 import pytest
 from datetime import date
 
@@ -37,6 +40,36 @@ class TestEntryManifest:
         await entry.insert()
         data = await _entry_full(entry, [], test_user.id)
         assert data["media"] == {}
+
+    async def test_manifest_includes_macro_payload_images(self, test_user):
+        """Images referenced ONLY inside macro payloads (gallery/figure) must
+        still land in the manifest — otherwise the frontend treats them as
+        not-ready and renders nothing."""
+        for sc in ("att_g1", "att_g2", "att_fig"):
+            await MediaFile(
+                user_id=test_user.id, shortcode=sc,
+                kind=MediaKind.PHOTO, status=MediaStatus.READY,
+            ).insert()
+
+        def macro(name: str, payload: dict) -> str:
+            raw = base64.b64encode(json.dumps(payload).encode()).decode()
+            return f"<!-- macro:{name} {raw} -->"
+
+        gallery = macro("gallery", {"images": ["att_g1", "att_g2"], "caption": "x"})
+        figure = macro("figure", {"image": "att_fig", "width": 33, "align": "left"})
+        content = f"Текст.\n\n{gallery}\n\n{figure}\n\nКінець."
+
+        entry = Entry(
+            user_id=test_user.id, date=date(2026, 6, 4),
+            content=content, source_messages=[], version=1,
+        )
+        await entry.insert()
+
+        data = await _entry_full(entry, [], test_user.id)
+        assert "att_g1" in data["media"]
+        assert "att_g2" in data["media"]
+        assert "att_fig" in data["media"]
+        assert data["media"]["att_g1"]["kind"] == "photo"
 
 
 from app.models.raw_message import RawMessage, SourceType, MessageStatus

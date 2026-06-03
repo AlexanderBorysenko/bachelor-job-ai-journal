@@ -38,18 +38,22 @@ DEFAULT_STYLE = """Стиль та оформлення:
 
 MEDIA_RULES = """Медіа-вкладення:
 - Тобі надано реєстр медіа-файлів із підказками (descriptive). Опис — ЛИШЕ підказка, де доречно розмістити файл; НЕ включай текст опису в запис.
-- Встав КОЖЕН файл як зображення-плейсхолдер у відповідному за змістом місці: `![](attach:SHORTCODE)`.
-- Якщо неможливо визначити доречне місце — додай файл у кінці запису.
-- Не вигадуй файлів, яких немає в реєстрі, і не повторюй той самий SHORTCODE двічі.
+- Розмісти КОЖЕН файл у відповідному за змістом місці. Якщо неможливо визначити доречне місце — додай файл у кінці запису.
+- Не вигадуй файлів, яких немає в реєстрі, і не повторюй той самий SHORTCODE двічі (ні inline, ні в макросі).
 
-Макроси оформлення (необов'язкові, ЛИШЕ для фото):
-- ГАЛЕРЕЯ для 2+ пов'язаних фото — на окремому рядку:
+Як оформлювати ФОТО (через макроси оформлення, кожен — на окремому рядку):
+- 2+ пов'язаних фото (одна подія/локація) → ГАЛЕРЕЯ:
   <!-- macro:gallery {"images":["att_x","att_y"],"caption":"короткий підпис"} -->
-- ФОТО З ОБТІКАННЯМ (текст обтікає одне фото збоку) — на окремому рядку перед потрібним абзацом:
+- ОДНЕ фото → ФІГУРА. Не лишай одиночне фото як inline-плейсхолдер — завжди обгортай у figure і САМ обери ширину й вирівнювання за контекстом і важливістю кадру:
   <!-- macro:figure {"image":"att_x","width":33,"align":"left","caption":"підпис"} -->
-  width ∈ {25,33,50}; align ∈ {left,right}.
-- Підпис (caption) пиши сам, короткий. Кожен SHORTCODE у макросі НЕ дублюй як inline `![](attach:...)`.
-- Відео та поодинокі прості фото залишай як inline `![](attach:SHORTCODE)`."""
+  Орієнтири (width ∈ {25,33,50,100}; align ∈ {left,right,center,full}):
+  • width:25 або 33, align:left/right — другорядне чи портретне фото-ілюстрація; текст обтікає його збоку. Постав макрос перед потрібним абзацом.
+  • width:50, align:center — змістовне фото, що варте уваги; стоїть окремо по центру.
+  • width:100, align:full — ключовий кадр моменту або широкий горизонтальний знімок на всю ширину.
+
+Інше:
+- ВІДЕО та відеокружальця → завжди inline-плейсхолдером `![](attach:SHORTCODE)` (макроси працюють ЛИШЕ для фото).
+- Підпис (caption) пиши сам, короткий. SHORTCODE, уже вставлений у макрос, НЕ дублюй як inline `![](attach:...)`."""
 
 
 def build_system_prompt(user_style: str | None, with_media: bool = False) -> str:
@@ -58,6 +62,68 @@ def build_system_prompt(user_style: str | None, with_media: bool = False) -> str
     if with_media:
         prompt = f"{prompt}\n\n{MEDIA_RULES}"
     return prompt
+
+
+def _split_messages(messages: list[RawMessage]) -> tuple[list[RawMessage], list[RawMessage]]:
+    """Split into (narrative, media) by source type."""
+    narrative = [m for m in messages if m.source_type in (SourceType.TEXT, SourceType.VOICE)]
+    media = [m for m in messages if m.source_type == SourceType.MEDIA]
+    return narrative, media
+
+
+async def _media_ctx(user_id) -> dict[str, str]:
+    """User-wide shortcode -> kind map, used to expand macros."""
+    return {
+        f.shortcode: f.kind.value
+        for f in await MediaFile.find({"user_id": user_id}).to_list()
+    }
+
+
+async def _render_date_content(
+    entry_date: date,
+    messages: list[RawMessage],
+    style_prompt: str | None,
+    media_ctx: dict,
+    *,
+    existing_content: str | None,
+) -> str:
+    """Produce finished markdown for one date from its messages (no DB writes).
+
+    ``existing_content is None`` → fresh generation (``_bake_new``);
+    otherwise → integrate the messages into it (``_bake_append``).
+    Handles the media registry, the Claude call, macro expansion and shortcode backfill.
+    """
+    narrative, media = _split_messages(messages)
+    registry = await _build_media_registry(media)
+    shortcodes = [e[0] for e in registry]
+    registry_text = _format_media_registry(registry) if registry else ""
+
+    if existing_content is None:
+        raw = await _bake_new(narrative, entry_date, style_prompt, registry_text, bool(registry))
+    else:
+        raw = await _bake_append(
+            existing_content, narrative, entry_date, style_prompt, registry_text, bool(registry)
+        )
+
+    content, macro_used = process_macros(raw, media_ctx)
+    return _ensure_all_shortcodes(content, shortcodes, extra_placed=macro_used)
+
+
+async def _save_entry(entry: Entry) -> Entry:
+    """Persist a regenerated/updated entry: bump version, reset highlights, save."""
+    entry.version = (entry.version or 1) + 1
+    entry.highlights_checked = False
+    entry.updated_at = datetime.utcnow()
+    await entry.save()
+    return entry
+
+
+async def _safe_extract_highlights(entries: list[Entry], user) -> None:
+    """Extract highlights, swallowing failures (non-critical to the bake)."""
+    try:
+        await extract_highlights_for_entries(entries, user)
+    except Exception as exc:
+        logger.warning("Highlights extraction failed (non-critical): %s", exc)
 
 
 async def bake_messages(
@@ -72,10 +138,7 @@ async def bake_messages(
     """
     user = await User.get(user_id)
     style_prompt = user.bake_style_prompt if user else None
-    media_ctx = {
-        f.shortcode: f.kind.value
-        for f in await MediaFile.find({"user_id": user_id}).to_list()
-    }
+    media_ctx = await _media_ctx(user_id)
 
     by_date: dict[date, list[RawMessage]] = defaultdict(list)
     for msg in messages:
@@ -102,12 +165,41 @@ async def bake_messages(
     if on_progress:
         await on_progress(total, total, "вилучення хайлайтів", "highlights")
 
-    try:
-        await extract_highlights_for_entries(entries, user)
-    except Exception as exc:
-        logger.warning("Highlights extraction failed (non-critical): %s", exc)
-
+    await _safe_extract_highlights(entries, user)
     return entries
+
+
+async def rebake_entry(
+    user_id,
+    entry: Entry,
+    on_progress: Optional[ProgressFn] = None,
+) -> list[Entry]:
+    """Regenerate an existing entry from scratch using its own source messages.
+
+    Fully replaces the entry's content (discarding manual edits), keeps
+    `source_messages` unchanged, leaves message status untouched, and re-extracts
+    highlights. Returns `[entry]` to match the bake-job engine contract.
+    """
+    user = await User.get(user_id)
+    style_prompt = user.bake_style_prompt if user else None
+    media_ctx = await _media_ctx(user_id)
+
+    messages = await RawMessage.find(
+        {"_id": {"$in": entry.source_messages}}
+    ).sort("+created_at").to_list()
+
+    if on_progress:
+        await on_progress(0, 1, f"запис за {entry.date.strftime('%d.%m.%Y')}", "baking")
+
+    entry.content = await _render_date_content(
+        entry.date, messages, style_prompt, media_ctx, existing_content=None,
+    )
+    await _save_entry(entry)
+
+    if on_progress:
+        await on_progress(1, 1, "вилучення хайлайтів", "highlights")
+    await _safe_extract_highlights([entry], user)
+    return [entry]
 
 
 async def _build_media_registry(media_messages: list[RawMessage]) -> list[tuple[str, str, str]]:
@@ -144,44 +236,29 @@ async def _bake_date(
     style_prompt: str | None = None,
     media_ctx: dict | None = None,
 ) -> Entry:
-    """Bake messages for a single date into an Entry."""
+    """Bake messages for a single date into an Entry (create or append)."""
     media_ctx = media_ctx or {}
-    narrative = [m for m in messages if m.source_type in (SourceType.TEXT, SourceType.VOICE)]
-    media = [m for m in messages if m.source_type == SourceType.MEDIA]
-    registry = await _build_media_registry(media)
-    shortcodes = [e[0] for e in registry]
-    registry_text = _format_media_registry(registry) if registry else ""
-
     existing = await Entry.find_one({"user_id": user_id, "date": entry_date})
 
+    content = await _render_date_content(
+        entry_date, messages, style_prompt, media_ctx,
+        existing_content=existing.content if existing else None,
+    )
+
     if existing:
-        content = await _bake_append(
-            existing.content, narrative, entry_date, style_prompt, registry_text, bool(registry)
-        )
-        content, macro_used = process_macros(content, media_ctx)
-        content = _ensure_all_shortcodes(content, shortcodes, extra_placed=macro_used)
         existing.content = content
         existing.source_messages.extend([msg.id for msg in messages])
-        existing.version = (existing.version or 1) + 1
-        existing.highlights_checked = False
-        existing.updated_at = datetime.utcnow()
-        await existing.save()
-        return existing
-    else:
-        content = await _bake_new(
-            narrative, entry_date, style_prompt, registry_text, bool(registry)
-        )
-        content, macro_used = process_macros(content, media_ctx)
-        content = _ensure_all_shortcodes(content, shortcodes, extra_placed=macro_used)
-        entry = Entry(
-            user_id=user_id,
-            date=entry_date,
-            content=content,
-            source_messages=[msg.id for msg in messages],
-            version=1,
-        )
-        await entry.insert()
-        return entry
+        return await _save_entry(existing)
+
+    entry = Entry(
+        user_id=user_id,
+        date=entry_date,
+        content=content,
+        source_messages=[msg.id for msg in messages],
+        version=1,
+    )
+    await entry.insert()
+    return entry
 
 
 async def _bake_new(

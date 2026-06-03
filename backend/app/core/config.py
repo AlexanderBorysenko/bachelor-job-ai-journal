@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # Media
     media_files_path: str = "/app/media_files"
+    media_max_upload_bytes: int = 25 * 1024 * 1024  # 25 MB web-upload cap
 
     # Bake
     bake_stale_seconds: int = 300

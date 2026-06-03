@@ -17,6 +17,17 @@ export const updateMessage = (id: string, body: { content?: string; classified_d
 export const deleteMessage = (id: string) =>
   api.delete(`/buffer/${id}`)
 
+export const uploadMessageMedia = (messageId: string, file: File) => {
+  const form = new FormData()
+  form.append('file', file)
+  return api.post(`/buffer/${messageId}/media/upload`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+export const updateMessageMedia = (messageId: string, shortcodes: string[]) =>
+  api.put(`/buffer/${messageId}/media`, { shortcodes })
+
 export const bake = () =>
   api.post('/buffer/bake')
 
@@ -38,6 +49,9 @@ export const updateEntry = (id: string, body: { content: string }) =>
 
 export const deleteEntry = (id: string) =>
   api.delete(`/entries/${id}`)
+
+export const rebakeEntry = (id: string) =>
+  api.post(`/entries/${id}/rebake`)
 
 // Highlights
 export const getHighlights = (params?: { category?: string; page?: number; per_page?: number }) =>

@@ -11,7 +11,7 @@ from app.models.bake_job import BakeJob, BakeJobStatus
 @pytest.mark.asyncio
 class TestActiveBakeHelper:
     async def test_returns_running_job(self, test_user):
-        from app.api.buffer import _active_bake
+        from app.services.bake_orchestrator import active_bake as _active_bake
         job = BakeJob(user_id=test_user.id, total_steps=2)
         await job.insert()
 
@@ -20,11 +20,11 @@ class TestActiveBakeHelper:
         assert active.id == job.id
 
     async def test_returns_none_when_no_job(self, test_user):
-        from app.api.buffer import _active_bake
+        from app.services.bake_orchestrator import active_bake as _active_bake
         assert await _active_bake(test_user.id) is None
 
     async def test_recovers_stale_job_and_returns_none(self, test_user):
-        from app.api.buffer import _active_bake
+        from app.services.bake_orchestrator import active_bake as _active_bake
         job = BakeJob(
             user_id=test_user.id,
             total_steps=2,
@@ -43,7 +43,7 @@ class TestActiveBakeHelper:
 @pytest.mark.asyncio
 class TestFailOrphanedBakes:
     async def test_marks_running_jobs_failed(self, test_user):
-        from app.api.buffer import _fail_orphaned_bakes
+        from app.services.bake_orchestrator import fail_orphaned_bakes as _fail_orphaned_bakes
         running = BakeJob(user_id=test_user.id, total_steps=1)
         await running.insert()
         # Use a distinct user_id for the completed job to avoid the mongomock unique-index
@@ -63,21 +63,23 @@ from app.models.entry import Entry
 
 
 @pytest.mark.asyncio
-class TestRunBake:
-    @patch("app.api.buffer.bake_messages", new_callable=AsyncMock)
-    async def test_success_marks_completed_and_fills_result(self, mock_bake, test_user):
-        from app.api.buffer import _run_bake
+class TestRunBakeJob:
+    """run_bake_job owns the BakeJob lifecycle; the engine is passed in explicitly."""
+
+    async def test_success_marks_completed_and_fills_result(self, test_user):
+        from app.services.bake_orchestrator import run_bake_job
 
         entry = Entry(user_id=test_user.id, date=__import__("datetime").date(2026, 4, 22),
                       content="x" * 300, source_messages=[], version=1)
         await entry.insert()
-        mock_bake.return_value = [entry]
+        engine = AsyncMock(return_value=[entry])
 
         job = BakeJob(user_id=test_user.id, total_steps=1)
         await job.insert()
 
-        await _run_bake(str(job.id), str(test_user.id), test_user.id, [])
+        await run_bake_job(str(job.id), str(test_user.id), test_user.id, engine)
 
+        assert engine.await_count == 1
         refreshed = await BakeJob.get(job.id)
         assert refreshed.status == BakeJobStatus.COMPLETED
         assert refreshed.completed_steps == refreshed.total_steps
@@ -85,26 +87,23 @@ class TestRunBake:
         assert len(refreshed.result_entries) == 1
         assert len(refreshed.result_entries[0]["preview"]) == 200
 
-    @patch("app.api.buffer.bake_messages", new_callable=AsyncMock)
-    async def test_exception_marks_failed(self, mock_bake, test_user):
-        from app.api.buffer import _run_bake
-        mock_bake.side_effect = RuntimeError("boom")
+    async def test_exception_marks_failed(self, test_user):
+        from app.services.bake_orchestrator import run_bake_job
+        engine = AsyncMock(side_effect=RuntimeError("boom"))
 
         job = BakeJob(user_id=test_user.id, total_steps=1)
         await job.insert()
 
-        await _run_bake(str(job.id), str(test_user.id), test_user.id, [])
+        await run_bake_job(str(job.id), str(test_user.id), test_user.id, engine)
 
         refreshed = await BakeJob.get(job.id)
         assert refreshed.status == BakeJobStatus.FAILED
         assert "boom" in refreshed.error_message
 
-    @patch("app.api.buffer.bake_messages", new_callable=AsyncMock)
-    async def test_does_not_resurrect_a_recovered_job(self, mock_bake, test_user):
+    async def test_does_not_resurrect_a_recovered_job(self, test_user):
         """If the job was flipped to FAILED (stale recovery / restart) while the
         engine was running, the completion write must NOT revive it to COMPLETED."""
-        from app.api.buffer import _run_bake
-        from app.models.entry import Entry
+        from app.services.bake_orchestrator import run_bake_job
 
         entry = Entry(user_id=test_user.id, date=__import__("datetime").date(2026, 4, 22),
                       content="done", source_messages=[], version=1)
@@ -113,7 +112,7 @@ class TestRunBake:
         job = BakeJob(user_id=test_user.id, total_steps=1)
         await job.insert()
 
-        async def flip_then_return(*args, **kwargs):
+        async def flip_then_return(report):
             # Simulate a concurrent recovery marking the job FAILED mid-bake.
             recovered = await BakeJob.get(job.id)
             recovered.status = BakeJobStatus.FAILED
@@ -121,9 +120,7 @@ class TestRunBake:
             await recovered.save()
             return [entry]
 
-        mock_bake.side_effect = flip_then_return
-
-        await _run_bake(str(job.id), str(test_user.id), test_user.id, [])
+        await run_bake_job(str(job.id), str(test_user.id), test_user.id, flip_then_return)
 
         refreshed = await BakeJob.get(job.id)
         assert refreshed.status == BakeJobStatus.FAILED  # NOT resurrected to COMPLETED
