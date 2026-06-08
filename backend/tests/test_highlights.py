@@ -57,7 +57,7 @@ class TestExtractHighlights:
         entry = Entry(
             user_id=test_user.id,
             date=date(2026, 4, 22),
-            content="Сьогодні придумав ідею AI щоденника.",
+            blocks=[{"type": "markdown", "text": "Сьогодні придумав ідею AI щоденника."}],
             source_messages=[],
             version=1,
         )
@@ -84,7 +84,7 @@ class TestExtractHighlights:
         entry = Entry(
             user_id=test_user.id,
             date=date(2026, 4, 22),
-            content="Звичайний день. Працював, пообідав.",
+            blocks=[{"type": "markdown", "text": "Звичайний день. Працював, пообідав."}],
             source_messages=[],
             version=1,
         )

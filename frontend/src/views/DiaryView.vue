@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { marked } from 'marked'
 import { getEntryByDate, getEntries, getEntryRaw, updateEntry, deleteEntry, rebakeEntry } from '../api'
 import { useEvents } from '../composables/useEvents'
-import { injectMacros } from '../utils/macros'
+import BlockRenderer from '../components/blocks/BlockRenderer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,7 +28,7 @@ function scrollToHeading(id: string) {
 }
 
 function startEdit() {
-  editContent.value = entry.value.content
+  editContent.value = JSON.stringify(entry.value.blocks || [], null, 2)
   editing.value = true
 }
 
@@ -39,13 +38,23 @@ function cancelEdit() {
 
 async function saveEdit() {
   if (!entry.value) return
+  let blocks: any[]
+  try {
+    blocks = JSON.parse(editContent.value)
+  } catch {
+    alert('Некоректний JSON блоків')
+    return
+  }
+  if (!Array.isArray(blocks)) {
+    alert('JSON має бути масивом блоків [ ... ]')
+    return
+  }
   saving.value = true
   try {
-    const { data } = await updateEntry(entry.value.id, { content: editContent.value })
+    const { data } = await updateEntry(entry.value.id, { blocks })
     entry.value = data
     editing.value = false
-  } catch {}
-  finally {
+  } catch {} finally {
     saving.value = false
   }
 }
@@ -155,60 +164,24 @@ interface TocItem {
 }
 
 const tocItems = computed<TocItem[]>(() => {
-  if (!entry.value?.content) return []
-  const headingRegex = /^(#{2,3})\s+(.+)$/gm
+  const blocks = entry.value?.blocks || []
   const items: TocItem[] = []
-  let match
-  while ((match = headingRegex.exec(entry.value.content)) !== null) {
-    const text = match[2].trim()
-    const id = text
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s-]/gu, '')
-      .replace(/\s+/g, '-')
-    items.push({ id, text, level: match[1].length })
+  const headingRegex = /^(#{2,3})\s+(.+)$/gm
+  for (const b of blocks) {
+    if (b.type !== 'markdown' || typeof b.text !== 'string') continue
+    let match
+    while ((match = headingRegex.exec(b.text)) !== null) {
+      const text = match[2].trim()
+      const id = text
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s-]/gu, '')
+        .replace(/\s+/g, '-')
+      items.push({ id, text, level: match[1].length })
+    }
   }
   return items
 })
 
-function injectMedia(html: string, manifest: Record<string, any>): string {
-  return html.replace(
-    /<img[^>]*src="attach:([A-Za-z0-9_]+)"[^>]*>/g,
-    (_full, code) => {
-      const info = manifest?.[code]
-      const src = `/api/media/${code}`
-      if (!info) return `<span class="diary-media-missing">📎</span>`
-      if (info.status !== 'ready') {
-        const poster = info.has_poster
-          ? `<img src="${src}/poster" class="diary-media" loading="lazy">`
-          : ''
-        return `<div class="diary-media-note">${poster}<span>Медіа недоступне</span></div>`
-      }
-      if (info.kind === 'photo') {
-        return `<img src="${src}" class="diary-media" loading="lazy">`
-      }
-      const posterAttr = info.has_poster ? ` poster="${src}/poster"` : ''
-      const cls = info.kind === 'video_note' ? 'diary-media diary-media--circle' : 'diary-media'
-      return `<video controls class="${cls}"${posterAttr} src="${src}"></video>`
-    }
-  )
-}
-
-const renderedContent = computed(() => {
-  if (!entry.value?.content) return ''
-  const renderer = new marked.Renderer()
-  renderer.heading = function ({ tokens, depth }) {
-    const text = this.parser.parseInline(tokens)
-    const plain = text.replace(/<[^>]*>/g, '')
-    const id = plain
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s-]/gu, '')
-      .replace(/\s+/g, '-')
-    return `<h${depth} id="${id}">${text}</h${depth}>`
-  }
-  const html = marked(entry.value.content, { renderer }) as string
-  const withMedia = injectMedia(html, entry.value.media || {})
-  return injectMacros(withMedia, entry.value.media || {})
-})
 
 useEvents({
   'bake:started': () => { rebaking.value = true },
@@ -319,6 +292,7 @@ watch(() => route.params.date, (newDate) => {
 
       <!-- Edit mode -->
       <div v-if="editing" class="bg-white rounded-xl border border-sand-200 p-4 sm:p-6 mb-4">
+        <p class="text-xs text-sand-400 mb-2">Редагування блоків (JSON). Прозу правьте у полі <code>text</code> блоків типу <code>markdown</code>.</p>
         <textarea
           v-model="editContent"
           class="w-full min-h-[300px] border border-sand-200 rounded-lg p-4 text-sm text-sand-800 resize-y focus:outline-none focus:ring-2 focus:ring-accent/30"
@@ -358,7 +332,7 @@ watch(() => route.params.date, (newDate) => {
             </li>
           </ul>
         </nav>
-        <div class="diary-content" v-html="renderedContent"></div>
+        <BlockRenderer :blocks="entry.blocks || []" :media="entry.media || {}" />
       </div>
 
       <!-- Highlights -->
@@ -414,117 +388,3 @@ watch(() => route.params.date, (newDate) => {
   </div>
 </template>
 
-<style scoped>
-.diary-content :deep(h2) {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--color-sand-800);
-  margin-top: 1.5rem;
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.25rem;
-  border-bottom: 1px solid var(--color-sand-200);
-}
-
-.diary-content :deep(h2:first-child) {
-  margin-top: 0;
-}
-
-.diary-content :deep(h3) {
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: var(--color-sand-700);
-  margin-top: 1rem;
-  margin-bottom: 0.375rem;
-}
-
-.diary-content :deep(p) {
-  margin-bottom: 0.75rem;
-  line-height: 1.7;
-  color: var(--color-sand-800);
-}
-
-.diary-content :deep(strong) {
-  font-weight: 600;
-}
-
-.diary-content :deep(ul),
-.diary-content :deep(ol) {
-  margin-bottom: 0.75rem;
-  padding-left: 1.5rem;
-}
-
-.diary-content :deep(li) {
-  margin-bottom: 0.25rem;
-  line-height: 1.6;
-}
-
-.diary-content :deep(hr) {
-  border: none;
-  border-top: 1px solid var(--color-sand-200);
-  margin: 1.25rem 0;
-}
-
-.diary-content :deep(.diary-media) {
-  max-width: 100%;
-  border-radius: 0.75rem;
-  margin: 0.75rem 0;
-  display: block;
-}
-
-.diary-content :deep(.diary-media--circle) {
-  width: 240px;
-  height: 240px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.diary-content :deep(.diary-media-note) {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--color-sand-500);
-  font-size: 0.875rem;
-  margin: 0.75rem 0;
-}
-
-.diary-content :deep(.diary-gallery) { margin: 1rem 0; }
-.diary-content :deep(.diary-gallery__grid) { columns: 3 200px; column-gap: 8px; }
-.diary-content :deep(.diary-gallery__item) {
-  display: block;
-  break-inside: avoid;
-  margin-bottom: 8px;
-}
-.diary-content :deep(.diary-gallery__item img) {
-  width: 100%;
-  height: auto;
-  border-radius: 0.5rem;
-  display: block;
-}
-.diary-content :deep(.diary-gallery__caption),
-.diary-content :deep(.diary-figure__caption) {
-  text-align: center;
-  font-size: 0.85rem;
-  color: var(--color-sand-500);
-  margin-top: 0.4rem;
-}
-
-.diary-content :deep(.diary-figure) { margin: 0.25rem 0 1rem; }
-.diary-content :deep(.diary-figure img) {
-  width: 100%;
-  height: auto;
-  border-radius: 0.5rem;
-  display: block;
-}
-.diary-content :deep(.diary-figure--left) { float: left; margin-right: 1rem; }
-.diary-content :deep(.diary-figure--right) { float: right; margin-left: 1rem; }
-.diary-content :deep(.diary-figure--center) { margin-left: auto; margin-right: auto; }
-.diary-content :deep(.diary-figure--full) { width: 100% !important; }
-
-.diary-content :deep(h2),
-.diary-content :deep(h3) { clear: both; }
-
-@media (max-width: 640px) {
-  .diary-content :deep(.diary-figure) { float: none !important; width: 100% !important; }
-  .diary-content :deep(.diary-gallery__grid) { columns: 2 140px; }
-}
-</style>

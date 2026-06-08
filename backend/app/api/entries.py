@@ -12,7 +12,7 @@ from app.models.entry import Entry
 from app.models.raw_message import RawMessage
 from app.models.highlight import Highlight
 from app.models.media_file import MediaFile
-from app.services.macros import collect_shortcodes
+from app.services.blocks import collect_shortcodes, normalize_blocks, blocks_to_text
 from app.services.bake import rebake_entry
 from app.services.bake_orchestrator import active_bake, launch_bake, serialize_bake_job
 from app.api.dependencies import get_current_user_id
@@ -146,7 +146,7 @@ async def rebake(
 
 
 class UpdateEntryRequest(BaseModel):
-    content: str
+    blocks: list[dict]
 
 
 @router.patch("/{entry_id}")
@@ -155,12 +155,16 @@ async def update_entry(
     body: UpdateEntryRequest,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Update an entry's content."""
+    """Update an entry's blocks (server-normalized)."""
     entry = await Entry.get(entry_id)
     if not entry or str(entry.user_id) != user_id:
         raise HTTPException(status_code=404, detail="Запис не знайдено")
 
-    entry.content = body.content
+    media_files = await MediaFile.find({"user_id": entry.user_id}).to_list()
+    media_ctx = {f.shortcode: f.kind.value for f in media_files}
+    blocks, _ = normalize_blocks(body.blocks, media_ctx)
+
+    entry.blocks = blocks
     entry.version += 1
     entry.updated_at = datetime.utcnow()
     await entry.save()
@@ -183,8 +187,8 @@ async def delete_entry(
     await entry.delete()
 
 
-async def _media_manifest(content: str, user_id) -> dict:
-    shortcodes = collect_shortcodes(content)
+async def _media_manifest(blocks, user_id) -> dict:
+    shortcodes = collect_shortcodes(blocks)
     if not shortcodes:
         return {}
     files = await MediaFile.find(
@@ -204,10 +208,11 @@ async def _media_manifest(content: str, user_id) -> dict:
 
 
 def _entry_preview(entry: Entry) -> dict:
+    preview = blocks_to_text(entry.blocks)
     return {
         "id": str(entry.id),
         "date": entry.date.isoformat(),
-        "content_preview": entry.content[:200] + "..." if len(entry.content) > 200 else entry.content,
+        "content_preview": preview[:200] + "..." if len(preview) > 200 else preview,
         "version": entry.version,
         "created_at": entry.created_at.isoformat() if entry.created_at else None,
         "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
@@ -218,8 +223,8 @@ async def _entry_full(entry: Entry, highlights: list[Highlight], user_id) -> dic
     return {
         "id": str(entry.id),
         "date": entry.date.isoformat(),
-        "content": entry.content,
-        "media": await _media_manifest(entry.content, user_id),
+        "blocks": entry.blocks,
+        "media": await _media_manifest(entry.blocks, user_id),
         "source_messages_count": len(entry.source_messages),
         "highlights": [
             {"id": str(h.id), "title": h.title, "category": h.category}

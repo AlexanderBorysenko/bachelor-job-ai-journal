@@ -77,7 +77,7 @@ class TestEntryModel:
         entry = Entry(
             user_id=test_user.id,
             date=date(2026, 4, 22),
-            content="Запис щоденника.",
+            blocks=[{"type": "markdown", "text": "Запис щоденника."}],
             source_messages=[],
             version=1,
         )
@@ -85,21 +85,21 @@ class TestEntryModel:
 
         found = await Entry.find_one({"user_id": test_user.id, "date": date(2026, 4, 22)})
         assert found is not None
-        assert found.content == "Запис щоденника."
+        assert found.blocks == [{"type": "markdown", "text": "Запис щоденника."}]
 
     async def test_one_entry_per_date(self, test_user):
         """Verify we can find unique entry per user+date."""
         entry = Entry(
             user_id=test_user.id,
             date=date(2026, 4, 22),
-            content="First version",
+            blocks=[{"type": "markdown", "text": "First version"}],
             source_messages=[],
             version=1,
         )
         await entry.insert()
 
         found = await Entry.find_one({"user_id": test_user.id, "date": date(2026, 4, 22)})
-        found.content = "Updated version"
+        found.blocks = [{"type": "markdown", "text": "Updated version"}]
         found.version = 2
         await found.save()
 

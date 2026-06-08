@@ -6,12 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-import anthropic
-
 from app.api.dependencies import get_current_user, get_current_user_id
 from app.core.config import settings as app_settings
 from app.models.user import User
-from app.services.bake import build_system_prompt, DEFAULT_STYLE
+from app.services.bake import _call_claude, DEFAULT_STYLE
+from app.services.blocks import blocks_to_text
 
 logger = logging.getLogger(__name__)
 
@@ -74,29 +73,26 @@ async def preview_style(
     body: PreviewStyleRequest,
     user: User = Depends(get_current_user),
 ):
-    system_prompt = build_system_prompt(_normalize_style_prompt(body.style_prompt))
     user_prompt = (
         "Дата: 22 квітня 2026\n\n"
         "Сирі повідомлення (хронологічно):\n\n"
         f"{PREVIEW_SAMPLE_MESSAGES}\n\n"
         "Створи щоденниковий запис за цю дату."
     )
-
-    client = anthropic.AsyncAnthropic(api_key=app_settings.anthropic_api_key)
     try:
-        response = await client.messages.create(
-            model=app_settings.claude_model,
-            max_tokens=2048,
+        blocks = await _call_claude(
+            user_prompt,
+            style_prompt=_normalize_style_prompt(body.style_prompt),
             temperature=0.7,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
+            max_tokens=2048,
+            model=app_settings.claude_model_preview,
+            effort=app_settings.claude_effort_preview,
         )
-        preview_text = response.content[0].text.strip()
     except Exception as exc:
         logger.error("Preview style failed: %s", exc)
         raise HTTPException(status_code=502, detail="Не вдалося згенерувати попередній перегляд")
 
     return {
-        "preview": preview_text,
+        "preview": blocks_to_text(blocks),
         "sample_messages": PREVIEW_SAMPLE_LIST,
     }

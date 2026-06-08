@@ -11,6 +11,8 @@ from app.core.config import settings
 from app.models.entry import Entry
 from app.models.highlight import Highlight
 from app.models.user import User
+from app.services.blocks import blocks_to_text
+from app.services.llm import output_config
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,7 @@ async def extract_highlights(entry: Entry, user: Optional[User] = None) -> list[
     formatted_date = entry.date.strftime("%d %B %Y")
     user_prompt = (
         f"Дата запису: {formatted_date}\n\n"
-        f"Текст запису:\n---\n{entry.content}\n---\n\n"
+        f"Текст запису:\n---\n{blocks_to_text(entry.blocks)}\n---\n\n"
         f"Виокреми хайлайти з цього запису."
     )
 
@@ -93,11 +95,12 @@ async def extract_highlights(entry: Entry, user: Optional[User] = None) -> list[
     for attempt in range(3):
         try:
             response = await client.messages.create(
-                model=settings.claude_model,
+                model=settings.claude_model_highlights,
                 max_tokens=2048,
                 temperature=0.3,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
+                **output_config(effort=settings.claude_effort_highlights),
             )
 
             raw_text = response.content[0].text.strip()

@@ -34,22 +34,22 @@ class TestRebakeEntryEngine:
     @patch("app.services.bake.extract_highlights_for_entries", new_callable=AsyncMock)
     @patch("app.services.bake._call_claude", new_callable=AsyncMock)
     async def test_regenerates_and_replaces_content(self, mock_claude, mock_highlights, test_user):
-        mock_claude.return_value = "# Новий запис\n\nПро гори."
+        mock_claude.return_value = [{"type": "markdown", "text": "# Новий запис\n\nПро гори."}]
         mock_highlights.return_value = []
 
         msg = _baked_msg(test_user)
         await msg.insert()
         entry = Entry(
             user_id=test_user.id, date=date(2026, 6, 1),
-            content="СТАРИЙ ТЕКСТ (ручна правка)", source_messages=[msg.id], version=3,
+            blocks=[{"type": "markdown", "text": "СТАРИЙ ТЕКСТ (ручна правка)"}], source_messages=[msg.id], version=3,
         )
         await entry.insert()
 
         result = await bake.rebake_entry(test_user.id, entry)
 
         assert result == [entry]
-        assert "Новий запис" in entry.content
-        assert "СТАРИЙ ТЕКСТ" not in entry.content
+        assert any("Новий запис" in b.get("text", "") for b in entry.blocks)
+        assert all("СТАРИЙ ТЕКСТ" not in b.get("text", "") for b in entry.blocks)
         assert entry.version == 4                     # bumped by _save_entry
         assert entry.source_messages == [msg.id]      # unchanged
         refreshed = await RawMessage.get(msg.id)
@@ -58,12 +58,12 @@ class TestRebakeEntryEngine:
     @patch("app.services.bake.extract_highlights_for_entries", new_callable=AsyncMock)
     @patch("app.services.bake._call_claude", new_callable=AsyncMock)
     async def test_reports_progress_baking_then_highlights(self, mock_claude, mock_highlights, test_user):
-        mock_claude.return_value = "Запис."
+        mock_claude.return_value = [{"type": "markdown", "text": "Запис."}]
         mock_highlights.return_value = []
 
         msg = _baked_msg(test_user)
         await msg.insert()
-        entry = Entry(user_id=test_user.id, date=date(2026, 6, 1), content="old",
+        entry = Entry(user_id=test_user.id, date=date(2026, 6, 1), blocks=[{"type": "markdown", "text": "old"}],
                       source_messages=[msg.id])
         await entry.insert()
 
@@ -81,11 +81,11 @@ class TestRebakeEntryEngine:
     async def test_reextracts_highlights_drops_stale(self, mock_claude, test_user):
         # Claude returns plain text (not JSON) -> highlight extraction yields [] but
         # still deletes the entry's stale highlights before re-extraction.
-        mock_claude.return_value = "# Запис\n\nТекст."
+        mock_claude.return_value = [{"type": "markdown", "text": "# Запис\n\nТекст."}]
 
         msg = _baked_msg(test_user, content="ідея для стартапу")
         await msg.insert()
-        entry = Entry(user_id=test_user.id, date=date(2026, 6, 1), content="old",
+        entry = Entry(user_id=test_user.id, date=date(2026, 6, 1), blocks=[{"type": "markdown", "text": "old"}],
                       source_messages=[msg.id])
         await entry.insert()
         stale = Highlight(
@@ -108,22 +108,21 @@ class TestRenderDateContentDispatch:
 
         async def fake_new(*a, **k):
             calls["new"] = True
-            return "NEW"
+            return [{"type": "markdown", "text": "NEW"}]
 
         async def fake_append(*a, **k):
             calls["append"] = True
-            return "APPENDED"
+            return [{"type": "markdown", "text": "APPENDED"}]
 
         with patch("app.services.bake._bake_new", new=fake_new), \
-             patch("app.services.bake._bake_append", new=fake_append), \
-             patch("app.services.bake.process_macros", new=lambda c, ctx: (c, frozenset())):
+             patch("app.services.bake._bake_append", new=fake_append):
             fresh = await bake._render_date_content(
-                date(2026, 6, 1), [], None, {}, existing_content=None)
+                date(2026, 6, 1), [], None, {}, existing_blocks=None)
             appended = await bake._render_date_content(
-                date(2026, 6, 1), [], None, {}, existing_content="OLD")
+                date(2026, 6, 1), [], None, {}, existing_blocks=[{"type": "markdown", "text": "OLD"}])
 
-        assert fresh == "NEW" and calls.get("new")
-        assert appended == "APPENDED" and calls.get("append")
+        assert fresh == [{"type": "markdown", "text": "NEW"}] and calls.get("new")
+        assert appended == [{"type": "markdown", "text": "APPENDED"}] and calls.get("append")
 
 
 # --- endpoint ---------------------------------------------------------------
@@ -133,7 +132,7 @@ class TestRebakeEndpoint:
     async def test_starts_job(self, test_user):
         msg = _baked_msg(test_user)
         await msg.insert()
-        entry = Entry(user_id=test_user.id, date=date(2026, 6, 1), content="old",
+        entry = Entry(user_id=test_user.id, date=date(2026, 6, 1), blocks=[{"type": "markdown", "text": "old"}],
                       source_messages=[msg.id])
         await entry.insert()
 
@@ -151,7 +150,7 @@ class TestRebakeEndpoint:
         assert exc.value.status_code == 404
 
     async def test_404_for_other_users_entry(self, test_user):
-        entry = Entry(user_id=ObjectId(), date=date(2026, 6, 1), content="x",
+        entry = Entry(user_id=ObjectId(), date=date(2026, 6, 1), blocks=[{"type": "markdown", "text": "x"}],
                       source_messages=[ObjectId()])
         await entry.insert()
         with pytest.raises(HTTPException) as exc:
@@ -159,7 +158,7 @@ class TestRebakeEndpoint:
         assert exc.value.status_code == 404
 
     async def test_422_when_no_source_messages(self, test_user):
-        entry = Entry(user_id=test_user.id, date=date(2026, 6, 1), content="old",
+        entry = Entry(user_id=test_user.id, date=date(2026, 6, 1), blocks=[{"type": "markdown", "text": "old"}],
                       source_messages=[])
         await entry.insert()
         with pytest.raises(HTTPException) as exc:
@@ -169,7 +168,7 @@ class TestRebakeEndpoint:
     async def test_409_when_bake_active(self, test_user):
         msg = _baked_msg(test_user)
         await msg.insert()
-        entry = Entry(user_id=test_user.id, date=date(2026, 6, 1), content="old",
+        entry = Entry(user_id=test_user.id, date=date(2026, 6, 1), blocks=[{"type": "markdown", "text": "old"}],
                       source_messages=[msg.id])
         await entry.insert()
         await BakeJob(user_id=test_user.id, total_steps=1, status=BakeJobStatus.RUNNING).insert()

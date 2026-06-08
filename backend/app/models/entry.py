@@ -9,7 +9,7 @@ class Entry(Document):
 
     user_id: PydanticObjectId
     date: date
-    content: str  # Markdown literary text
+    blocks: list[dict] = Field(default_factory=list)  # ordered typed content blocks
     source_messages: list[PydanticObjectId] = Field(default_factory=list)
     highlights_checked: bool = False
     version: int = 1

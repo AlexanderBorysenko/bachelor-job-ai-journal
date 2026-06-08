@@ -70,7 +70,7 @@ class TestRunBakeJob:
         from app.services.bake_orchestrator import run_bake_job
 
         entry = Entry(user_id=test_user.id, date=__import__("datetime").date(2026, 4, 22),
-                      content="x" * 300, source_messages=[], version=1)
+                      blocks=[{"type": "markdown", "text": "x" * 300}], source_messages=[], version=1)
         await entry.insert()
         engine = AsyncMock(return_value=[entry])
 
@@ -106,7 +106,7 @@ class TestRunBakeJob:
         from app.services.bake_orchestrator import run_bake_job
 
         entry = Entry(user_id=test_user.id, date=__import__("datetime").date(2026, 4, 22),
-                      content="done", source_messages=[], version=1)
+                      blocks=[{"type": "markdown", "text": "done"}], source_messages=[], version=1)
         await entry.insert()
 
         job = BakeJob(user_id=test_user.id, total_steps=1)

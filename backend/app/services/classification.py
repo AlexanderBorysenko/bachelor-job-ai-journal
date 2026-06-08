@@ -71,7 +71,7 @@ async def classify_date(
     for attempt in range(max_retries):
         try:
             response = await client.messages.create(
-                model=settings.claude_model,
+                model=settings.claude_model_classification,
                 max_tokens=256,
                 temperature=0.0,
                 system=SYSTEM_PROMPT,

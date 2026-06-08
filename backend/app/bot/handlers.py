@@ -7,6 +7,7 @@ from app.models.user import User
 from app.models.raw_message import RawMessage, MessageStatus
 from app.models.inbound_event import InboundKind, Initiator
 from app.services.bake import bake_messages
+from app.services.blocks import blocks_to_text
 from app.services.intake import register_inbound_event, inflight_inbound_count
 from app.core.events import event_bus
 from app.bot import media_bucket
@@ -88,7 +89,7 @@ async def cmd_bake(message: types.Message):
         await event_bus.publish(user_id_str, "bake:complete", {
             "entries_created": len(entries),
             "entries": [
-                {"id": str(e.id), "date": e.date.isoformat(), "preview": e.content[:200]}
+                {"id": str(e.id), "date": e.date.isoformat(), "preview": blocks_to_text(e.blocks)[:200]}
                 for e in entries
             ],
         })

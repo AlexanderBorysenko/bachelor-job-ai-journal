@@ -16,6 +16,7 @@ from beanie.operators import Set
 from app.models.bake_job import BakeJob, BakeJobStatus
 from app.core.events import event_bus
 from app.core.config import settings
+from app.services.blocks import blocks_to_text
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,7 @@ async def run_bake_job(job_id: str, user_id: str, uid: ObjectId, engine: "Engine
         logger.info("Bake job %s completed for user %s: %d entries", job_id, user_id, len(entries))
 
         result_entries = [
-            {"id": str(e.id), "date": e.date.isoformat(), "preview": e.content[:200]}
+            {"id": str(e.id), "date": e.date.isoformat(), "preview": blocks_to_text(e.blocks)[:200]}
             for e in entries
         ]
 

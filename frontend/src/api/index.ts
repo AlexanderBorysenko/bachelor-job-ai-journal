@@ -44,7 +44,7 @@ export const getEntry = (id: string) =>
 export const getEntryRaw = (id: string) =>
   api.get(`/entries/${id}/raw`)
 
-export const updateEntry = (id: string, body: { content: string }) =>
+export const updateEntry = (id: string, body: { blocks: any[] }) =>
   api.patch(`/entries/${id}`, body)
 
 export const deleteEntry = (id: string) =>

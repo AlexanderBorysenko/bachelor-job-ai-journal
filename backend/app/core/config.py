@@ -12,7 +12,15 @@ class Settings(BaseSettings):
 
     # Claude API
     anthropic_api_key: str = ""
-    claude_model: str = "claude-sonnet-4-20250514"
+    # Per-task model + effort (effort "" = omitted; Haiku has no effort param)
+    claude_model_bake: str = "claude-sonnet-4-6"
+    claude_effort_bake: str = "medium"
+    claude_model_highlights: str = "claude-sonnet-4-6"
+    claude_effort_highlights: str = "low"
+    claude_model_classification: str = "claude-haiku-4-5"
+    claude_effort_classification: str = ""
+    claude_model_preview: str = "claude-sonnet-4-6"
+    claude_effort_preview: str = "low"
 
     # Whisper API
     openai_api_key: str = ""

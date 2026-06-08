@@ -13,7 +13,7 @@ from app.api.entries import _entry_full
 
 @pytest.mark.asyncio
 class TestEntryManifest:
-    async def test_manifest_built_from_content(self, test_user):
+    async def test_manifest_built_from_blocks(self, test_user):
         mf = MediaFile(
             user_id=test_user.id, shortcode="att_man", kind=MediaKind.VIDEO,
             status=MediaStatus.READY, mime="video/mp4", width=1920, height=1080,
@@ -23,7 +23,8 @@ class TestEntryManifest:
 
         entry = Entry(
             user_id=test_user.id, date=date(2026, 6, 2),
-            content="Запис ![](attach:att_man) кінець.", source_messages=[], version=1,
+            blocks=[{"type": "figure", "media": "att_man", "width": 100, "align": "full", "caption": ""}],
+            source_messages=[], version=1,
         )
         await entry.insert()
 
@@ -32,36 +33,30 @@ class TestEntryManifest:
         assert data["media"]["att_man"]["kind"] == "video"
         assert data["media"]["att_man"]["has_poster"] is True
 
-    async def test_empty_when_no_placeholders(self, test_user):
+    async def test_empty_when_no_media_blocks(self, test_user):
         entry = Entry(
             user_id=test_user.id, date=date(2026, 6, 3),
-            content="Без медіа.", source_messages=[], version=1,
+            blocks=[{"type": "markdown", "text": "Без медіа."}], source_messages=[], version=1,
         )
         await entry.insert()
         data = await _entry_full(entry, [], test_user.id)
         assert data["media"] == {}
 
-    async def test_manifest_includes_macro_payload_images(self, test_user):
-        """Images referenced ONLY inside macro payloads (gallery/figure) must
-        still land in the manifest — otherwise the frontend treats them as
-        not-ready and renders nothing."""
+    async def test_manifest_includes_gallery_and_figure_media(self, test_user):
         for sc in ("att_g1", "att_g2", "att_fig"):
             await MediaFile(
                 user_id=test_user.id, shortcode=sc,
                 kind=MediaKind.PHOTO, status=MediaStatus.READY,
             ).insert()
 
-        def macro(name: str, payload: dict) -> str:
-            raw = base64.b64encode(json.dumps(payload).encode()).decode()
-            return f"<!-- macro:{name} {raw} -->"
-
-        gallery = macro("gallery", {"images": ["att_g1", "att_g2"], "caption": "x"})
-        figure = macro("figure", {"image": "att_fig", "width": 33, "align": "left"})
-        content = f"Текст.\n\n{gallery}\n\n{figure}\n\nКінець."
-
         entry = Entry(
             user_id=test_user.id, date=date(2026, 6, 4),
-            content=content, source_messages=[], version=1,
+            blocks=[
+                {"type": "markdown", "text": "Текст."},
+                {"type": "gallery", "images": ["att_g1", "att_g2"], "caption": "x"},
+                {"type": "figure", "media": "att_fig", "width": 33, "align": "left", "caption": ""},
+            ],
+            source_messages=[], version=1,
         )
         await entry.insert()
 

@@ -43,7 +43,7 @@ class TestBakeMessages:
     @patch("app.services.bake.extract_highlights_for_entries", new_callable=AsyncMock)
     @patch("app.services.bake._call_claude", new_callable=AsyncMock)
     async def test_single_date_creates_entry(self, mock_claude, mock_highlights, test_user):
-        mock_claude.return_value = "Чудовий день. Прокинувся рано і пішов гуляти."
+        mock_claude.return_value = [{"type": "markdown", "text": "Чудовий день. Прокинувся рано і пішов гуляти."}]
         mock_highlights.return_value = []
 
         msg = RawMessage(
@@ -60,7 +60,7 @@ class TestBakeMessages:
 
         assert len(entries) == 1
         assert entries[0].date == date(2026, 4, 22)
-        assert entries[0].content == "Чудовий день. Прокинувся рано і пішов гуляти."
+        assert entries[0].blocks == [{"type": "markdown", "text": "Чудовий день. Прокинувся рано і пішов гуляти."}]
         assert len(entries[0].source_messages) == 1
 
         # Check message is now baked
@@ -70,7 +70,7 @@ class TestBakeMessages:
     @patch("app.services.bake.extract_highlights_for_entries", new_callable=AsyncMock)
     @patch("app.services.bake._call_claude", new_callable=AsyncMock)
     async def test_multiple_dates_creates_multiple_entries(self, mock_claude, mock_highlights, test_user):
-        mock_claude.return_value = "Запис за день."
+        mock_claude.return_value = [{"type": "markdown", "text": "Запис за день."}]
         mock_highlights.return_value = []
 
         msg1 = RawMessage(
@@ -102,14 +102,14 @@ class TestBakeMessages:
     @patch("app.services.bake.extract_highlights_for_entries", new_callable=AsyncMock)
     @patch("app.services.bake._call_claude", new_callable=AsyncMock)
     async def test_append_to_existing_entry(self, mock_claude, mock_highlights, test_user):
-        mock_claude.return_value = "Оновлений запис з новою інформацією."
+        mock_claude.return_value = [{"type": "markdown", "text": "Оновлений запис з новою інформацією."}]
         mock_highlights.return_value = []
 
         # Create existing entry
         existing = Entry(
             user_id=test_user.id,
             date=date(2026, 4, 22),
-            content="Ранковий запис.",
+            blocks=[{"type": "markdown", "text": "Ранковий запис."}],
             source_messages=[],
             version=1,
         )
@@ -129,7 +129,7 @@ class TestBakeMessages:
 
         assert len(entries) == 1
         assert entries[0].version == 2
-        assert entries[0].content == "Оновлений запис з новою інформацією."
+        assert entries[0].blocks == [{"type": "markdown", "text": "Оновлений запис з новою інформацією."}]
 
         # Verify only 1 entry for this date (not a duplicate)
         all_entries = await Entry.find({"date": date(2026, 4, 22)}).to_list()
@@ -138,7 +138,7 @@ class TestBakeMessages:
     @patch("app.services.bake.extract_highlights_for_entries", new_callable=AsyncMock)
     @patch("app.services.bake._call_claude", new_callable=AsyncMock)
     async def test_on_progress_reports_each_date_then_highlights(self, mock_claude, mock_highlights, test_user):
-        mock_claude.return_value = "Запис."
+        mock_claude.return_value = [{"type": "markdown", "text": "Запис."}]
         mock_highlights.return_value = []
 
         msg1 = RawMessage(
