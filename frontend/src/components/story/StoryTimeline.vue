@@ -25,7 +25,7 @@ function fmt(date: string) {
 
 <template>
     <div class="flex flex-col">
-        <div ref="scroller" class="overflow-y-auto max-h-[60vh] pr-1">
+        <div ref="scroller" class="flex-1 min-h-0 overflow-y-auto pr-1">
             <div class="relative">
                 <!-- continuous vertical line -->
                 <div
@@ -79,7 +79,7 @@ function fmt(date: string) {
                 </ul>
             </div>
         </div>
-        <div class="flex justify-center gap-2 mt-2">
+        <div class="flex justify-center gap-2 mt-2 shrink-0">
             <button
                 class="px-2 py-1 text-sand-500 hover:text-accent"
                 @click="scrollRail(-120)"
