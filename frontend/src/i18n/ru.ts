@@ -61,6 +61,13 @@ export default {
     delete: 'Удалить',
     fromEntry: 'из записи от {date}',
   },
+  storyPoints: {
+    timelineTitle: 'Ключевые моменты',
+    toggle: 'Хронология ({count})',
+    addPoint: 'Добавить',
+    placeholder: 'Новый момент…',
+    empty: 'Пока нет моментов',
+  },
   settings: {
     title: 'Настройки',
     language: { label: 'Язык интерфейса' },

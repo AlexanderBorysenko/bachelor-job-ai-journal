@@ -89,3 +89,22 @@ export const updateSettings = (body: { bake_style_prompt?: string | null; langua
 
 export const previewStyle = (body: { style_prompt?: string | null }) =>
   api.post('/settings/preview-style', body)
+
+// Story points
+export const getStoryTimeline = () =>
+  api.get('/storypoints/timeline')
+
+export const getEntryStoryPoints = (entryId: string) =>
+  api.get('/storypoints', { params: { entry_id: entryId } })
+
+export const createStoryPoint = (entryId: string, title: string) =>
+  api.post('/storypoints', { entry_id: entryId, title })
+
+export const updateStoryPoint = (id: string, title: string) =>
+  api.patch(`/storypoints/${id}`, { title })
+
+export const reorderStoryPoints = (entryId: string, orderedIds: string[]) =>
+  api.put('/storypoints/reorder', { entry_id: entryId, ordered_ids: orderedIds })
+
+export const deleteStoryPoint = (id: string) =>
+  api.delete(`/storypoints/${id}`)
