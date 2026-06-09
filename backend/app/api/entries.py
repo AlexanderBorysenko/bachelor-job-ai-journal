@@ -11,6 +11,7 @@ from pymongo.errors import DuplicateKeyError
 from app.models.entry import Entry
 from app.models.raw_message import RawMessage
 from app.models.highlight import Highlight
+from app.models.story_point import StoryPoint
 from app.models.media_file import MediaFile
 from app.models.user import User
 from app.services.blocks import collect_shortcodes, normalize_blocks, blocks_to_text
@@ -198,6 +199,7 @@ async def delete_entry(
         raise HTTPException(status_code=404, detail=t("entry_not_found", lang))
 
     await Highlight.find({"source_entries": entry.id}).delete()
+    await StoryPoint.find({"entry_id": entry.id}).delete()
     await entry.delete()
 
 

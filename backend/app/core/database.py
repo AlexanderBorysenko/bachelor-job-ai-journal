@@ -16,8 +16,9 @@ async def init_db():
     from app.models.media_file import MediaFile
     from app.models.bake_job import BakeJob
     from app.models.inbound_event import InboundEvent
+    from app.models.story_point import StoryPoint
 
     await init_beanie(
         database=db,
-        document_models=[User, RawMessage, Entry, Highlight, MediaFile, BakeJob, InboundEvent],
+        document_models=[User, RawMessage, Entry, Highlight, MediaFile, BakeJob, InboundEvent, StoryPoint],
     )

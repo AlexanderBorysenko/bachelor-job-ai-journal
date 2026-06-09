@@ -61,6 +61,13 @@ export default {
     delete: 'Delete',
     fromEntry: 'from the entry of {date}',
   },
+  storyPoints: {
+    timelineTitle: 'Key story points',
+    toggle: 'Timeline ({count})',
+    addPoint: 'Add',
+    placeholder: 'New story point…',
+    empty: 'No story points yet',
+  },
   settings: {
     title: 'Settings',
     language: { label: 'Interface language' },

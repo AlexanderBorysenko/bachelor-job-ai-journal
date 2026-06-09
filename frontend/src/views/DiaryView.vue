@@ -4,12 +4,16 @@ import { useRoute, useRouter } from 'vue-router'
 import { getEntryByDate, getEntries, getEntryRaw, updateEntry, deleteEntry, rebakeEntry } from '../api'
 import { useEvents } from '../composables/useEvents'
 import BlockRenderer from '../components/blocks/BlockRenderer.vue'
+import StoryTimelinePanel from '../components/story/StoryTimelinePanel.vue'
+import StoryPointsEditor from '../components/story/StoryPointsEditor.vue'
+import { useStoryPoints } from '../composables/useStoryPoints'
 import { useI18n } from 'vue-i18n'
 import { bcp47, type Language } from '../i18n'
 const { t, locale } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
+const { timeline: storyTimeline, loadTimeline: loadStoryTimeline } = useStoryPoints()
 
 const entry = ref<any>(null)
 const prevDate = ref<string | null>(null)
@@ -209,6 +213,7 @@ useEvents({
 })
 
 onMounted(() => {
+  loadStoryTimeline()
   const dateParam = route.params.date as string
   if (dateParam) {
     loadEntry(dateParam)
@@ -248,7 +253,12 @@ watch(() => route.params.date, (newDate) => {
         <h1 class="text-base sm:text-xl font-medium text-sand-800 text-center mb-2 sm:mb-0 sm:hidden">
           {{ formatDate(entry.date) }}
         </h1>
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between gap-2">
+          <StoryTimelinePanel
+            :groups="storyTimeline"
+            :active-date="entry.date"
+            @navigate="goTo"
+          />
           <button
             @click="goTo(prevDate)"
             :disabled="!prevDate"
@@ -337,6 +347,12 @@ watch(() => route.params.date, (newDate) => {
         </nav>
         <BlockRenderer :blocks="entry.blocks || []" :media="entry.media || {}" />
       </div>
+
+      <!-- Story points editor (read mode only) -->
+      <StoryPointsEditor
+        v-if="!editing"
+        :entry-id="entry.id"
+      />
 
       <!-- Highlights -->
       <div v-if="entry.highlights?.length" class="mb-4">
